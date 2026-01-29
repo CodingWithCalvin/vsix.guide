@@ -6,5 +6,5 @@
     </linearGradient>
   </defs>
   <rect width="32" height="32" rx="6" fill="url(#vsGrad)"/>
-  <text x="16" y="22" font-family="Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="white" text-anchor="middle" letter-spacing="-1">VS</text>
+  <text x="16" y="21" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="white" text-anchor="middle" letter-spacing="-0.5">VSX</text>
 </svg>
