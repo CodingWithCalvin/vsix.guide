@@ -1,4 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="4" fill="#7c3aed"/>
-  <text x="16" y="22" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white" text-anchor="middle">VS</text>
+  <defs>
+    <linearGradient id="vsGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#a855f7"/>
+      <stop offset="100%" style="stop-color:#6b21a8"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="32" height="32" rx="6" fill="url(#vsGrad)"/>
+  <!-- Puzzle piece cutout (extension symbol) -->
+  <path d="M8 11 L8 8 Q8 6 10 6 L14 6 L14 7 Q14 9 16 9 Q18 9 18 7 L18 6 L22 6 Q24 6 24 8 L24 12 L23 12 Q21 12 21 14 Q21 16 23 16 L24 16 L24 20 Q24 22 22 22 L18 22 L18 21 Q18 19 16 19 Q14 19 14 21 L14 22 L10 22 Q8 22 8 20 L8 16 L9 16 Q11 16 11 14 Q11 12 9 12 L8 12 Z" fill="white" fill-opacity="0.95"/>
+  <!-- Small sparkle accent -->
+  <circle cx="25" cy="7" r="1.5" fill="white" fill-opacity="0.6"/>
 </svg>
