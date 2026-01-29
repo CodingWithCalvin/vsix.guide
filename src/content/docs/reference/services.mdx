@@ -1,0 +1,175 @@
+---
+title: Services Reference
+description: Complete reference of Visual Studio service identifiers and how to use them.
+category: reference
+order: 1
+---
+
+Visual Studio exposes functionality through services accessed via `IServiceProvider.QueryService()`. This reference documents the most commonly used services.
+
+## Service Provider Pattern
+
+```csharp
+// Async (recommended)
+var service = await ServiceProvider.GetServiceAsync(typeof(SVsUIShell)) as IVsUIShell;
+
+// Sync (legacy)
+var service = (IVsTextManager)GetService(typeof(SVsTextManager));
+```
+
+## Text Management Services
+
+| Service ID | Interface | Description |
+|------------|-----------|-------------|
+| `SVsTextManager` | `IVsTextManager`, `IVsTextManager2` | Text buffer and view management |
+| `SVsCodeWindow` | `IVsCodeWindow` | Code editor window access |
+| `SVsCodeWindowManager` | `IVsCodeWindowManager` | Code window dropdowns and adornments |
+| `SVsLinkedUndoTransactionManager` | `IVsLinkedUndoTransactionManager` | Linked undo operations |
+| `SVsExpansionManager` | `IVsExpansionManager` | Code snippet expansion |
+| `SVsTextSpanSet` | `IVsTextSpanSet` | Text span collections |
+| `SVsRegisterFindScope` | `IVsRegisterFindScope` | Custom find scopes |
+
+```csharp
+// Example: Get active text view
+var textManager = (IVsTextManager)GetService(typeof(SVsTextManager));
+textManager.GetActiveView(1, null, out IVsTextView activeView);
+```
+
+## Project and Solution Services
+
+| Service ID | Interface | Description |
+|------------|-----------|-------------|
+| `SVsTrackProjectDocuments` | `IVsTrackProjectDocuments2` | Track document changes |
+| `SVsQueryEditQuerySave` | `IVsQueryEditQuerySave2` | Source control edit/save |
+| `SVsProjectMRU` | `IVsProjectMRU` | Recent projects list |
+| `SVsDesignTimeAssemblyResolution` | `IVsDesignTimeAssemblyResolution` | Design-time assembly resolution |
+| `SVsStartupProjectsListService` | `IVsStartupProjectsListService` | Startup projects |
+
+```csharp
+// Example: Track document changes
+var tracker = (IVsTrackProjectDocuments2)GetService(typeof(SVsTrackProjectDocuments));
+tracker.AdviseTrackProjectDocumentsEvents(myEventSink, out uint cookie);
+```
+
+## Source Control Services
+
+| Service ID | Interface | Description |
+|------------|-----------|-------------|
+| `SVsSccManager` | `IVsSccManager2`, `IVsSccManager3` | Source control manager |
+| `SVsSccToolsOptions` | `IVsSccToolsOptions` | SCC options |
+| `SVsRegisterScciProvider` | `IVsRegisterScciProvider` | Register SCC providers |
+
+## Debug Services
+
+| Service ID | Interface | Description |
+|------------|-----------|-------------|
+| `SVsShellDebugger` | `IVsDebugger`, `IVsDebugger2`, `IVsDebugger3` | Main debugger service |
+| `SVsDebugTargetSelectionService` | `IVsDebugTargetSelectionService` | Debug target selection |
+
+```csharp
+// Example: Check debug mode
+var debugger = (IVsDebugger)GetService(typeof(SVsShellDebugger));
+DBGMODE[] mode = new DBGMODE[1];
+debugger.GetMode(mode);
+
+if (mode[0] == DBGMODE.DBGMODE_Break)
+{
+    // At breakpoint
+}
+```
+
+## Shell Services
+
+| Service ID | Interface | Description |
+|------------|-----------|-------------|
+| `SVsUIShell` | `IVsUIShell`, `IVsUIShell2` | UI shell (dialogs, windows) |
+| `SVsGeneralOutputWindowPane` | `IVsOutputWindowPane` | General output pane |
+| `SVsSolutionPersistence` | `IVsSolutionPersistence` | Solution persistence |
+| `SVsMonitorUserContext` | `IVsMonitorUserContext` | F1 Help context |
+
+```csharp
+// Example: Show message box
+var uiShell = (IVsUIShell)GetService(typeof(SVsUIShell));
+Guid clsid = Guid.Empty;
+uiShell.ShowMessageBox(0, ref clsid, "Title", "Message", null, 0,
+    OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST,
+    OLEMSGICON.OLEMSGICON_INFO, 0, out int result);
+```
+
+## Component Services
+
+| Service ID | Interface | Description |
+|------------|-----------|-------------|
+| `SComponentModel` | `IComponentModel` | MEF component model |
+| `SVsFrameworkMultiTargeting` | `IVsFrameworkMultiTargeting` | Multi-targeting info |
+| `SVsSettingsManager` | `IVsSettingsManager` | VS settings |
+
+```csharp
+// Example: Get MEF service
+var componentModel = (IComponentModel)GetService(typeof(SComponentModel));
+var myService = componentModel.GetService<IMyMefService>();
+```
+
+## UI Services
+
+| Service ID | Interface | Description |
+|------------|-----------|-------------|
+| `SVsThreadedWaitDialogFactory` | `IVsThreadedWaitDialogFactory` | Wait dialogs |
+| `SVsInfoBarUIFactory` | `IVsInfoBarUIFactory` | Info bar UI |
+| `SVsActivityLog` | `IVsActivityLog` | Activity logging |
+
+```csharp
+// Example: Threaded wait dialog
+var factory = (IVsThreadedWaitDialogFactory)GetService(typeof(SVsThreadedWaitDialogFactory));
+factory.CreateInstance(out IVsThreadedWaitDialog2 dialog);
+dialog.StartWaitDialog("Working...", "Please wait...", null, null, null, 0, false, true);
+// ... do work ...
+dialog.EndWaitDialog(out bool cancelled);
+```
+
+## Build Services
+
+| Service ID | Interface | Description |
+|------------|-----------|-------------|
+| `SVsBuildManagerAccessor` | `IVsBuildManagerAccessor` | Build manager access |
+
+## Best Practices
+
+### Async Service Access
+
+```csharp
+// Preferred: async
+var service = await ServiceProvider.GetServiceAsync(typeof(SVsUIShell)) as IVsUIShell;
+
+// With Community Toolkit
+var service = await VS.GetServiceAsync<SVsUIShell, IVsUIShell>();
+```
+
+### Null Checking
+
+```csharp
+var service = GetService(typeof(SVsTextManager)) as IVsTextManager;
+if (service == null)
+{
+    // Handle missing service
+    return;
+}
+```
+
+### Thread Safety
+
+```csharp
+await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+var uiShell = (IVsUIShell)GetService(typeof(SVsUIShell));
+```
+
+### Error Handling
+
+```csharp
+int hr = textManager.GetActiveView(1, null, out activeView);
+if (ErrorHandler.Failed(hr))
+{
+    // Log or handle error
+    return;
+}
+```

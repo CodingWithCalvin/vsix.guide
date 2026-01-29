@@ -1,0 +1,439 @@
+---
+title: Performance Best Practices
+description: Optimize your Visual Studio extension for speed and responsiveness.
+category: advanced
+order: 7
+---
+
+import Callout from '@components/Callout.astro';
+
+Performance is critical for VS extensions. Slow extensions frustrate users and can impact the entire IDE experience. This guide covers best practices for building fast, responsive extensions.
+
+## Key Principles
+
+1. **Don't block the UI thread** - Use async patterns
+2. **Load lazily** - Defer work until needed
+3. **Cache wisely** - Balance memory vs. computation
+4. **Profile regularly** - Measure before optimizing
+
+## Async Loading
+
+### Package Loading
+
+```csharp
+// Good: Async package with background loading
+[PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
+[ProvideAutoLoad(UIContextGuids80.SolutionExists, PackageAutoLoadFlags.BackgroundLoad)]
+public sealed class MyPackage : AsyncPackage
+{
+    protected override async Task InitializeAsync(
+        CancellationToken cancellationToken,
+        IProgress<ServiceProgressData> progress)
+    {
+        // Do background work first
+        var config = await LoadConfigAsync();
+
+        // Only switch to main thread when necessary
+        await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+        InitializeUI(config);
+    }
+}
+```
+
+<Callout type="warning">
+Never use synchronous `Package` base class in new code. Always use `AsyncPackage`.
+</Callout>
+
+### Avoid Auto-Load When Possible
+
+```csharp
+// Bad: Loads on every VS startup
+[ProvideAutoLoad(UIContextGuids80.NoSolution)]
+public sealed class MyPackage : AsyncPackage { }
+
+// Good: Only loads when needed
+[ProvideAutoLoad(UIContextGuids80.SolutionExists, PackageAutoLoadFlags.BackgroundLoad)]
+public sealed class MyPackage : AsyncPackage { }
+
+// Better: No auto-load, let commands/tool windows trigger loading
+// (No ProvideAutoLoad attribute)
+public sealed class MyPackage : AsyncPackage { }
+```
+
+## UI Thread Best Practices
+
+### Switch Threads Appropriately
+
+```csharp
+public async Task ProcessFilesAsync()
+{
+    // Start on background thread
+    var files = await Task.Run(() => ScanDirectory());
+
+    // Switch to main thread for VS API calls
+    await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+    foreach (var file in files)
+    {
+        AddToSolution(file); // Must be on main thread
+    }
+
+    // Switch back to background for I/O
+    await TaskScheduler.Default;
+    await SaveResultsAsync(files);
+}
+```
+
+### Avoid Task.Result and Task.Wait
+
+```csharp
+// Bad: Blocks the calling thread
+var result = AsyncMethod().Result; // Potential deadlock!
+AsyncMethod().Wait(); // Blocks thread
+
+// Good: Await properly
+var result = await AsyncMethod();
+
+// If you must go sync-to-async (rare)
+ThreadHelper.JoinableTaskFactory.Run(async () =>
+{
+    await AsyncMethod();
+});
+```
+
+## Lazy Initialization
+
+### Lazy Services
+
+```csharp
+public class MyService
+{
+    private readonly Lazy<ExpensiveComponent> _component;
+    private readonly Lazy<IVsSolution> _solution;
+
+    public MyService(IAsyncServiceProvider serviceProvider)
+    {
+        _component = new Lazy<ExpensiveComponent>(
+            () => new ExpensiveComponent(),
+            LazyThreadSafetyMode.ExecutionAndPublication);
+
+        _solution = new Lazy<IVsSolution>(() =>
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            return serviceProvider.GetService(typeof(SVsSolution)) as IVsSolution;
+        });
+    }
+
+    public void UseComponent()
+    {
+        // Only created on first access
+        _component.Value.DoWork();
+    }
+}
+```
+
+### Deferred Operations
+
+```csharp
+public class MyToolWindow : ToolWindowPane
+{
+    private MyContentControl _content;
+    private bool _initialized;
+
+    protected override void OnCreate()
+    {
+        base.OnCreate();
+        // Don't load heavy content in constructor
+        Content = new LoadingPlaceholder();
+    }
+
+    public override void OnToolWindowCreated()
+    {
+        base.OnToolWindowCreated();
+        // Defer heavy initialization
+        _ = InitializeContentAsync();
+    }
+
+    private async Task InitializeContentAsync()
+    {
+        if (_initialized) return;
+
+        // Load data in background
+        var data = await Task.Run(() => LoadHeavyData());
+
+        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+        _content = new MyContentControl(data);
+        Content = _content;
+        _initialized = true;
+    }
+}
+```
+
+## Caching Strategies
+
+### Memory-Efficient Caching
+
+```csharp
+public class DocumentCache
+{
+    // Use ConditionalWeakTable for automatic cleanup
+    private readonly ConditionalWeakTable<ITextBuffer, ParsedDocument> _cache
+        = new ConditionalWeakTable<ITextBuffer, ParsedDocument>();
+
+    public ParsedDocument GetOrParse(ITextBuffer buffer)
+    {
+        return _cache.GetValue(buffer, b => ParseDocument(b));
+    }
+}
+```
+
+### Time-Based Cache
+
+```csharp
+public class TimedCache<TKey, TValue>
+{
+    private readonly ConcurrentDictionary<TKey, CacheEntry<TValue>> _cache
+        = new ConcurrentDictionary<TKey, CacheEntry<TValue>>();
+    private readonly TimeSpan _expiration;
+
+    public TimedCache(TimeSpan expiration)
+    {
+        _expiration = expiration;
+    }
+
+    public TValue GetOrAdd(TKey key, Func<TKey, TValue> factory)
+    {
+        var entry = _cache.GetOrAdd(key, k => new CacheEntry<TValue>(factory(k)));
+
+        if (entry.IsExpired(_expiration))
+        {
+            var newEntry = new CacheEntry<TValue>(factory(key));
+            _cache.TryUpdate(key, newEntry, entry);
+            return newEntry.Value;
+        }
+
+        return entry.Value;
+    }
+}
+```
+
+## Event Handling
+
+### Debounce Rapid Events
+
+```csharp
+public class TextChangeHandler
+{
+    private CancellationTokenSource _cts;
+    private readonly TimeSpan _debounceDelay = TimeSpan.FromMilliseconds(500);
+
+    public void OnTextChanged(object sender, TextContentChangedEventArgs e)
+    {
+        // Cancel previous pending operation
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+
+        // Debounce: wait before processing
+        _ = ProcessChangesAsync(_cts.Token);
+    }
+
+    private async Task ProcessChangesAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(_debounceDelay, cancellationToken);
+            // Only runs if not cancelled by newer change
+            await DoExpensiveProcessingAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when cancelled
+        }
+    }
+}
+```
+
+### Batch Updates
+
+```csharp
+public class BatchedUpdater
+{
+    private readonly List<Update> _pendingUpdates = new List<Update>();
+    private readonly object _lock = new object();
+    private bool _updateScheduled;
+
+    public void QueueUpdate(Update update)
+    {
+        lock (_lock)
+        {
+            _pendingUpdates.Add(update);
+            if (!_updateScheduled)
+            {
+                _updateScheduled = true;
+                _ = ProcessBatchAsync();
+            }
+        }
+    }
+
+    private async Task ProcessBatchAsync()
+    {
+        await Task.Delay(100); // Allow accumulation
+
+        List<Update> batch;
+        lock (_lock)
+        {
+            batch = new List<Update>(_pendingUpdates);
+            _pendingUpdates.Clear();
+            _updateScheduled = false;
+        }
+
+        // Process all updates at once
+        await ProcessUpdatesAsync(batch);
+    }
+}
+```
+
+## Memory Management
+
+### Avoid Memory Leaks
+
+```csharp
+public class MyEditorExtension : IDisposable
+{
+    private readonly IWpfTextView _textView;
+
+    public MyEditorExtension(IWpfTextView textView)
+    {
+        _textView = textView;
+
+        // Use weak events to prevent leaks
+        WeakEventManager<ITextBuffer, TextContentChangedEventArgs>
+            .AddHandler(textView.TextBuffer, "Changed", OnTextChanged);
+
+        // Or ensure you unsubscribe
+        _textView.Closed += OnClosed;
+    }
+
+    private void OnClosed(object sender, EventArgs e)
+    {
+        Dispose();
+    }
+
+    public void Dispose()
+    {
+        _textView.Closed -= OnClosed;
+        // Clean up other resources
+    }
+}
+```
+
+### Pool Reusable Objects
+
+```csharp
+public class StringBuilderPool
+{
+    private static readonly ObjectPool<StringBuilder> _pool
+        = new DefaultObjectPool<StringBuilder>(
+            new StringBuilderPooledObjectPolicy());
+
+    public static StringBuilder Rent() => _pool.Get();
+
+    public static void Return(StringBuilder sb)
+    {
+        sb.Clear();
+        _pool.Return(sb);
+    }
+}
+
+// Usage
+var sb = StringBuilderPool.Rent();
+try
+{
+    sb.Append("...");
+    return sb.ToString();
+}
+finally
+{
+    StringBuilderPool.Return(sb);
+}
+```
+
+## Profiling
+
+### Using PerfView
+
+```powershell
+# Collect VS extension performance data
+PerfView.exe /GCCollectOnly /NoGUI collect
+
+# Then analyze the .etl file in PerfView
+```
+
+### Built-in VS Profiling
+
+```csharp
+using Microsoft.VisualStudio.Utilities.UnifiedSettings;
+
+// Mark performance-sensitive regions
+using (var marker = CodeMarkerEx.CreateMarker(MyCodeMarkers.MyOperation))
+{
+    // Code to measure
+}
+```
+
+### Diagnostic Logging
+
+```csharp
+public static class PerformanceLogger
+{
+    public static IDisposable MeasureOperation(string operationName)
+    {
+        return new OperationMeasurement(operationName);
+    }
+
+    private class OperationMeasurement : IDisposable
+    {
+        private readonly string _name;
+        private readonly Stopwatch _sw;
+
+        public OperationMeasurement(string name)
+        {
+            _name = name;
+            _sw = Stopwatch.StartNew();
+        }
+
+        public void Dispose()
+        {
+            _sw.Stop();
+            if (_sw.ElapsedMilliseconds > 100)
+            {
+                Debug.WriteLine($"[PERF] {_name} took {_sw.ElapsedMilliseconds}ms");
+            }
+        }
+    }
+}
+
+// Usage
+using (PerformanceLogger.MeasureOperation("LoadSettings"))
+{
+    await LoadSettingsAsync();
+}
+```
+
+## Checklist
+
+Before releasing your extension:
+
+- [ ] Uses `AsyncPackage` with `AllowsBackgroundLoading`
+- [ ] Avoids auto-load or uses `BackgroundLoad` flag
+- [ ] No `Task.Result` or `Task.Wait` calls
+- [ ] UI thread usage is minimized
+- [ ] Event handlers are debounced where appropriate
+- [ ] No memory leaks (verified with profiler)
+- [ ] Large data is loaded lazily
+- [ ] Expensive operations are cached when appropriate
+
+## Next Steps
+
+You've completed the Advanced section! Check out the [Reference](/docs/reference/services) documentation for detailed API information.

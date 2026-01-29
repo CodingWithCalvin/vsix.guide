@@ -1,0 +1,383 @@
+---
+title: Async Services
+description: Learn how to implement async loading patterns and background services in VS extensions.
+category: fundamentals
+order: 8
+---
+
+import Callout from '@components/Callout.astro';
+
+Visual Studio 2015+ supports asynchronous package loading, which improves startup performance by allowing extensions to initialize in the background. Understanding async patterns is essential for well-behaved extensions.
+
+## Why Async Loading?
+
+Synchronous package loading blocks VS startup:
+
+```csharp
+// Bad: Blocks VS startup
+public sealed class MyPackage : Package
+{
+    protected override void Initialize()
+    {
+        // This runs on the main thread during VS startup
+        base.Initialize();
+        DoExpensiveWork(); // Blocks the UI!
+    }
+}
+```
+
+Async loading allows background initialization:
+
+```csharp
+// Good: Doesn't block VS startup
+public sealed class MyPackage : AsyncPackage
+{
+    protected override async Task InitializeAsync(
+        CancellationToken cancellationToken,
+        IProgress<ServiceProgressData> progress)
+    {
+        // This runs in the background
+        await DoExpensiveWorkAsync();
+
+        // Switch to main thread only when needed
+        await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+        RegisterCommands();
+    }
+}
+```
+
+## AsyncPackage
+
+### Basic Structure
+
+```csharp
+[PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
+[Guid("your-package-guid")]
+public sealed class MyPackage : AsyncPackage
+{
+    protected override async Task InitializeAsync(
+        CancellationToken cancellationToken,
+        IProgress<ServiceProgressData> progress)
+    {
+        // Phase 1: Background work (no UI access)
+        var config = await LoadConfigurationAsync();
+
+        // Phase 2: Main thread work (UI access OK)
+        await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+        InitializeUI(config);
+    }
+}
+```
+
+<Callout type="note">
+`AllowsBackgroundLoading = true` is required for async loading. Without it, VS falls back to synchronous initialization.
+</Callout>
+
+### Progress Reporting
+
+Show loading progress in VS:
+
+```csharp
+protected override async Task InitializeAsync(
+    CancellationToken cancellationToken,
+    IProgress<ServiceProgressData> progress)
+{
+    progress.Report(new ServiceProgressData("Loading configuration...", 1, 4));
+    var config = await LoadConfigurationAsync();
+
+    progress.Report(new ServiceProgressData("Initializing services...", 2, 4));
+    await InitializeServicesAsync();
+
+    progress.Report(new ServiceProgressData("Registering commands...", 3, 4));
+    await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+    await RegisterCommandsAsync();
+
+    progress.Report(new ServiceProgressData("Complete", 4, 4));
+}
+```
+
+## JoinableTaskFactory
+
+The `JoinableTaskFactory` safely handles async/sync transitions:
+
+### Switching Threads
+
+```csharp
+// Switch to main thread
+await JoinableTaskFactory.SwitchToMainThreadAsync();
+
+// Switch to background thread
+await TaskScheduler.Default;
+```
+
+### Running Async from Sync Code
+
+When you must call async code from sync code:
+
+```csharp
+// When you have a JoinableTaskFactory
+JoinableTaskFactory.Run(async () =>
+{
+    await DoAsyncWorkAsync();
+});
+
+// From a package
+ThreadHelper.JoinableTaskFactory.Run(async () =>
+{
+    await DoAsyncWorkAsync();
+});
+```
+
+<Callout type="warning">
+`JoinableTaskFactory.Run` should be used sparingly. It blocks the current thread waiting for async completion.
+</Callout>
+
+## Async Services
+
+### Providing Async Services
+
+```csharp
+[ProvideService(typeof(SMyService), IsAsyncQueryable = true)]
+public sealed class MyPackage : AsyncPackage
+{
+    protected override async Task InitializeAsync(
+        CancellationToken cancellationToken,
+        IProgress<ServiceProgressData> progress)
+    {
+        AddService(typeof(SMyService), CreateServiceAsync, promote: true);
+    }
+
+    private async Task<object> CreateServiceAsync(
+        IAsyncServiceContainer container,
+        CancellationToken cancellationToken,
+        Type serviceType)
+    {
+        // Create service on background thread if possible
+        var service = new MyService();
+        await service.InitializeAsync();
+        return service;
+    }
+}
+```
+
+### Consuming Async Services
+
+```csharp
+// Async (preferred)
+var service = await GetServiceAsync(typeof(SMyService)) as IMyService;
+
+// With Community Toolkit
+var service = await VS.GetServiceAsync<SMyService, IMyService>();
+```
+
+## Background Tasks
+
+### Long-Running Operations
+
+For operations that outlive a single method:
+
+```csharp
+public sealed class MyPackage : AsyncPackage
+{
+    private CancellationTokenSource _backgroundTaskCts;
+
+    protected override async Task InitializeAsync(
+        CancellationToken cancellationToken,
+        IProgress<ServiceProgressData> progress)
+    {
+        _backgroundTaskCts = new CancellationTokenSource();
+
+        // Start background work that continues running
+        _ = DoBackgroundWorkAsync(_backgroundTaskCts.Token);
+    }
+
+    private async Task DoBackgroundWorkAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            await Task.Delay(TimeSpan.FromMinutes(5), cancellationToken);
+            await ProcessInBackgroundAsync();
+        }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _backgroundTaskCts?.Cancel();
+            _backgroundTaskCts?.Dispose();
+        }
+        base.Dispose(disposing);
+    }
+}
+```
+
+### Fire-and-Forget with Error Handling
+
+```csharp
+// Use JoinableTaskFactory for fire-and-forget
+_ = JoinableTaskFactory.RunAsync(async () =>
+{
+    try
+    {
+        await DoWorkAsync();
+    }
+    catch (Exception ex)
+    {
+        await VS.StatusBar.ShowMessageAsync($"Error: {ex.Message}");
+    }
+});
+```
+
+## UI Context Activation
+
+Defer loading until specific conditions are met:
+
+```csharp
+[ProvideAutoLoad(VSConstants.UICONTEXT.SolutionExists_string, PackageAutoLoadFlags.BackgroundLoad)]
+public sealed class MyPackage : AsyncPackage
+{
+    protected override async Task InitializeAsync(
+        CancellationToken cancellationToken,
+        IProgress<ServiceProgressData> progress)
+    {
+        // Wait for solution to be fully loaded
+        await KnownUIContexts.SolutionExistsAndFullyLoadedContext.WaitForActivationAsync();
+
+        // Now safe to access solution services
+        var solution = await VS.Solutions.GetCurrentSolutionAsync();
+    }
+}
+```
+
+## Cancellation
+
+Always handle cancellation properly:
+
+```csharp
+protected override async Task InitializeAsync(
+    CancellationToken cancellationToken,
+    IProgress<ServiceProgressData> progress)
+{
+    // Check cancellation before expensive operations
+    cancellationToken.ThrowIfCancellationRequested();
+
+    // Pass token to async operations
+    var data = await LoadDataAsync(cancellationToken);
+
+    // Check again after long operations
+    cancellationToken.ThrowIfCancellationRequested();
+
+    await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+    ProcessData(data);
+}
+```
+
+## Best Practices
+
+### Do's
+
+```csharp
+// DO: Use async/await throughout
+protected override async Task InitializeAsync(...)
+{
+    await InitializeServicesAsync();
+}
+
+// DO: Switch to main thread only when needed
+await JoinableTaskFactory.SwitchToMainThreadAsync();
+DoUIWork();
+
+// DO: Handle cancellation
+try
+{
+    await LongOperationAsync(cancellationToken);
+}
+catch (OperationCanceledException)
+{
+    // Expected during VS shutdown
+}
+```
+
+### Don'ts
+
+```csharp
+// DON'T: Block on async code
+var result = AsyncMethod().Result; // Deadlock risk!
+
+// DON'T: Use Task.Run for VS APIs
+await Task.Run(() => vsService.DoWork()); // Wrong thread!
+
+// DON'T: Ignore cancellation tokens
+await LongOperationAsync(); // Should pass cancellationToken
+```
+
+## Complete Example
+
+```csharp
+[PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
+[Guid(PackageGuids.MyPackageString)]
+[ProvideAutoLoad(VSConstants.UICONTEXT.SolutionExists_string, PackageAutoLoadFlags.BackgroundLoad)]
+[ProvideService(typeof(SMyService), IsAsyncQueryable = true)]
+public sealed class MyPackage : AsyncPackage
+{
+    private IMyService _service;
+    private CancellationTokenSource _cts;
+
+    protected override async Task InitializeAsync(
+        CancellationToken cancellationToken,
+        IProgress<ServiceProgressData> progress)
+    {
+        _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        // Phase 1: Background initialization
+        progress.Report(new ServiceProgressData("Initializing service...", 1, 3));
+        _service = new MyService();
+        await _service.InitializeAsync(_cts.Token);
+        AddService(typeof(SMyService), (_, _, _) => Task.FromResult<object>(_service), true);
+
+        // Phase 2: Wait for VS to be ready
+        progress.Report(new ServiceProgressData("Waiting for solution...", 2, 3));
+        await KnownUIContexts.SolutionExistsAndFullyLoadedContext.WaitForActivationAsync();
+
+        // Phase 3: Main thread initialization
+        progress.Report(new ServiceProgressData("Registering commands...", 3, 3));
+        await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+        await this.RegisterCommandsAsync();
+
+        // Start background processing
+        _ = ProcessSolutionInBackgroundAsync(_cts.Token);
+    }
+
+    private async Task ProcessSolutionInBackgroundAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                await _service.ProcessAsync(cancellationToken);
+                await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected during shutdown
+        }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _cts?.Cancel();
+            _cts?.Dispose();
+            (_service as IDisposable)?.Dispose();
+        }
+        base.Dispose(disposing);
+    }
+}
+```
+
+## Next Steps
+
+You've completed the Fundamentals section! Continue to [Advanced Topics](/docs/advanced/overview) to learn about MEF components, language services, and more.

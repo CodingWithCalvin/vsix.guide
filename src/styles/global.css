@@ -1,0 +1,220 @@
+@import "tailwindcss";
+
+@theme {
+  /* VS Purple primary color palette */
+  --color-primary-50: #faf5ff;
+  --color-primary-100: #f3e8ff;
+  --color-primary-200: #e9d5ff;
+  --color-primary-300: #d8b4fe;
+  --color-primary-400: #c084fc;
+  --color-primary-500: #a855f7;
+  --color-primary-600: #9333ea;
+  --color-primary-700: #7c3aed;
+  --color-primary-800: #6b21a8;
+  --color-primary-900: #581c87;
+  --color-primary-950: #3b0764;
+
+  /* Shorthand for main primary */
+  --color-primary: #7c3aed;
+
+  /* Dark theme background colors */
+  --color-background: #0f0f0f;
+  --color-background-2: #1a1a1a;
+  --color-background-3: #242424;
+
+  /* Text colors */
+  --color-text: #f9fafb;
+  --color-text-muted: #a0a0a0;
+
+  /* Border colors */
+  --color-border: #333333;
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --font-heading: 'Inter', system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply bg-background text-text font-sans antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading font-bold text-text;
+  }
+
+  a {
+    @apply text-primary-400 hover:text-primary-300 transition-colors;
+  }
+
+  code {
+    @apply font-mono text-sm bg-background-3 px-1.5 py-0.5 rounded;
+  }
+
+  pre {
+    @apply font-mono text-sm bg-background-2 p-4 rounded-lg overflow-x-auto border border-border;
+  }
+
+  pre code {
+    @apply bg-transparent p-0;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg font-medium transition-all duration-200;
+  }
+
+  .btn-primary {
+    @apply bg-primary-700 text-white hover:bg-primary-600 shadow-lg shadow-primary-700/25;
+  }
+
+  .btn-secondary {
+    @apply bg-background-2 text-text border border-border hover:bg-background-3 hover:border-primary-700;
+  }
+
+  .card {
+    @apply bg-background-2 border border-border rounded-xl p-6 transition-all duration-200;
+  }
+
+  .card:hover {
+    @apply border-primary-700/50 shadow-lg shadow-primary-700/10;
+  }
+
+  .nav-link {
+    @apply text-text-muted hover:text-text transition-colors px-4 py-2;
+  }
+
+  .nav-link.active {
+    @apply text-primary-400;
+  }
+
+  .sidebar-link {
+    @apply block px-4 py-2 text-text-muted hover:text-text hover:bg-background-3 rounded-lg transition-colors;
+  }
+
+  .sidebar-link.active {
+    @apply text-primary-400 bg-primary-700/10 border-l-2 border-primary-700;
+  }
+
+  .sidebar-category {
+    @apply text-xs uppercase tracking-wider text-primary-400 font-bold mt-8 mb-3 px-4 py-2 border-b border-border;
+  }
+
+  .sidebar-category:first-child {
+    @apply mt-0;
+  }
+
+  /* Callout styles */
+  .callout {
+    @apply border-l-4 p-4 my-4 rounded-r-lg;
+  }
+
+  .callout-note {
+    @apply bg-blue-500/10 border-blue-500;
+  }
+
+  .callout-warning {
+    @apply bg-amber-500/10 border-amber-500;
+  }
+
+  .callout-tip {
+    @apply bg-green-500/10 border-green-500;
+  }
+
+  .callout-title {
+    @apply font-semibold mb-2;
+  }
+
+  .callout-note .callout-title {
+    @apply text-blue-400;
+  }
+
+  .callout-warning .callout-title {
+    @apply text-amber-400;
+  }
+
+  .callout-tip .callout-title {
+    @apply text-green-400;
+  }
+}
+
+@layer utilities {
+  .gradient-text {
+    @apply bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent;
+  }
+
+  .gradient-bg {
+    @apply bg-gradient-to-br from-primary-700/20 via-transparent to-primary-900/20;
+  }
+}
+
+/* Prose styling for documentation content */
+.prose {
+  @apply text-text max-w-none;
+}
+
+.prose h1 {
+  @apply text-3xl font-bold mb-6 mt-8;
+}
+
+.prose h2 {
+  @apply text-2xl font-bold mb-4 mt-8 pb-2 border-b border-border;
+}
+
+.prose h3 {
+  @apply text-xl font-semibold mb-3 mt-6;
+}
+
+.prose h4 {
+  @apply text-lg font-semibold mb-2 mt-4;
+}
+
+.prose p {
+  @apply mb-4 leading-relaxed text-text-muted;
+}
+
+.prose ul, .prose ol {
+  @apply mb-4 pl-6 text-text-muted;
+}
+
+.prose ul {
+  @apply list-disc;
+}
+
+.prose ol {
+  @apply list-decimal;
+}
+
+.prose li {
+  @apply mb-2;
+}
+
+.prose blockquote {
+  @apply border-l-4 border-primary-700 pl-4 italic text-text-muted my-4;
+}
+
+.prose table {
+  @apply w-full mb-4 border-collapse;
+}
+
+.prose th {
+  @apply text-left p-3 bg-background-2 border border-border font-semibold;
+}
+
+.prose td {
+  @apply p-3 border border-border;
+}
+
+.prose hr {
+  @apply my-8 border-border;
+}
+
+.prose strong {
+  @apply text-text font-semibold;
+}

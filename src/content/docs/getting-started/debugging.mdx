@@ -1,0 +1,162 @@
+---
+title: Debugging Extensions
+description: Learn to debug Visual Studio extensions using the Experimental Instance.
+category: getting-started
+order: 5
+---
+
+import Callout from '@components/Callout.astro';
+
+Debugging Visual Studio extensions requires running a second instance of VS - the Experimental Instance. This keeps your main VS installation clean while testing.
+
+## The Experimental Instance
+
+When you press F5 to debug your extension, Visual Studio launches a separate instance with its own:
+
+- Settings and configurations
+- Installed extensions
+- Window layouts
+- Recent projects
+
+This isolation means:
+- Your extension won't crash your main VS
+- You can test different configurations
+- You can easily reset to a clean state
+
+## Starting a Debug Session
+
+1. Set your VSIX project as the startup project
+2. Press **F5** or go to **Debug > Start Debugging**
+3. A new VS instance opens with "(Experimental Instance)" in the title bar
+4. Your extension is automatically installed and loaded
+
+<Callout type="note">
+The first launch of the Experimental Instance is slower as it initializes. Subsequent launches are faster.
+</Callout>
+
+## Setting Breakpoints
+
+Set breakpoints in your extension code just like any other project:
+
+```csharp
+protected override async Task ExecuteAsync(OleMenuCmdEventArgs e)
+{
+    // Set a breakpoint on the next line
+    var docView = await VS.Documents.GetActiveDocumentViewAsync();
+
+    if (docView?.TextView != null)
+    {
+        // Your code here
+    }
+}
+```
+
+When you trigger your command in the Experimental Instance, the debugger breaks at your breakpoint.
+
+## Debug Output
+
+Use the Output window to see diagnostic information:
+
+```csharp
+protected override async Task ExecuteAsync(OleMenuCmdEventArgs e)
+{
+    await VS.StatusBar.ShowMessageAsync("Command started...");
+
+    try
+    {
+        // Your code here
+        System.Diagnostics.Debug.WriteLine("Command executed successfully");
+    }
+    catch (Exception ex)
+    {
+        System.Diagnostics.Debug.WriteLine($"Error: {ex.Message}");
+    }
+}
+```
+
+View output in **View > Output** and select "Debug" from the dropdown.
+
+## ActivityLog.xml
+
+Visual Studio logs detailed information to `ActivityLog.xml`:
+
+**Location:**
+```
+%APPDATA%\Microsoft\VisualStudio\17.0_<hash>Exp\ActivityLog.xml
+```
+
+To enable verbose logging:
+1. Start VS with `/Log` command line argument
+2. Or set `VSLOGENABLED=1` environment variable
+
+<Callout type="tip">
+The ActivityLog is invaluable for diagnosing package loading failures and initialization errors.
+</Callout>
+
+## Resetting the Experimental Instance
+
+If the Experimental Instance gets corrupted or you want a fresh start:
+
+**Method 1: Visual Studio**
+1. Close all VS instances
+2. Open **Developer Command Prompt for VS 2022**
+3. Run: `devenv /ResetSettings Exp`
+
+**Method 2: Delete User Data**
+1. Close all VS instances
+2. Delete the folder: `%LOCALAPPDATA%\Microsoft\VisualStudio\17.0_<hash>Exp`
+
+**Method 3: Reset All**
+```powershell
+# From Developer Command Prompt
+devenv /ResetSettings Exp
+devenv /ClearCache Exp
+```
+
+## Common Debugging Issues
+
+### Extension Not Loading
+
+Check these common issues:
+
+1. **Missing attributes** - Ensure your package has `[PackageRegistration]`
+2. **Async loading** - Use `AllowsBackgroundLoading = true`
+3. **Missing dependencies** - Check your NuGet references
+4. **MEF errors** - Look in ActivityLog.xml for composition errors
+
+### Breakpoints Not Hit
+
+1. **Symbols not loaded** - Ensure PDB files are included
+2. **Wrong instance** - Make sure you're debugging the right VS
+3. **Background thread** - Use `JoinableTaskFactory.SwitchToMainThreadAsync()`
+
+### Package Load Failure
+
+Check the error message in VS and ActivityLog.xml:
+
+```
+SetSite failed for package [YourPackageGuid]
+```
+
+Common causes:
+- Exception in `InitializeAsync`
+- Missing service dependency
+- COM registration issue
+
+## Debug Configuration
+
+Your `.csproj` should include debug settings:
+
+```xml
+<PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+  <StartAction>Program</StartAction>
+  <StartProgram>$(DevEnvDir)devenv.exe</StartProgram>
+  <StartArguments>/rootsuffix Exp</StartArguments>
+</PropertyGroup>
+```
+
+The `/rootsuffix Exp` argument launches the Experimental Instance.
+
+## Next Steps
+
+Once your extension is working, learn about [Packaging and Publishing](/docs/getting-started/packaging) to share it with others.

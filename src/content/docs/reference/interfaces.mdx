@@ -1,0 +1,196 @@
+---
+title: IDL Interfaces Reference
+description: Reference documentation for Visual Studio COM interfaces defined in IDL files.
+category: reference
+order: 2
+---
+
+Visual Studio's extensibility APIs are defined in Interface Definition Language (IDL) files. This reference covers the key interface families.
+
+## IDL File Categories
+
+| Category | Files | Purpose |
+|----------|-------|---------|
+| Core Shell | `vsshell*.idl` | Main VS Shell interfaces |
+| Text/Editors | `textmgr*.idl` | Text buffer/view management |
+| Debugging | `msdbg*.idl` | Debug engine interfaces |
+| Symbol Providers | `sh.idl`, `ee.idl` | Symbol handlers, expression evaluators |
+| Source Control | `IVsSccManager*.idl` | SCC integration |
+
+## IVs* Interface Family
+
+### Hierarchy & Projects
+
+| Interface | Purpose |
+|-----------|---------|
+| `IVsHierarchy` | Base hierarchy interface for projects and items |
+| `IVsProject` | Project management |
+| `IVsProjectFactory` | Project creation |
+| `IVsHierarchyEvents` | Hierarchy change notifications |
+
+### Windows & UI
+
+| Interface | Purpose |
+|-----------|---------|
+| `IVsWindowFrame` | Tool/document window frame |
+| `IVsWindowFrameNotify` | Window notifications |
+| `IVsUIShell` | UI shell services |
+| `IVsUIHierWinClipboardHelper` | Clipboard operations |
+
+### Text/Editor
+
+| Interface | Purpose |
+|-----------|---------|
+| `IVsTextBuffer` | Text storage |
+| `IVsTextView` | Text display/editing |
+| `IVsCodeWindow` | Code editor window |
+| `IVsColorizer` | Syntax highlighting |
+| `IVsLanguageInfo` | Language service info |
+
+### Selection
+
+| Interface | Purpose |
+|-----------|---------|
+| `IVsMonitorSelection` | Selection tracking |
+| `IVsMultiItemSelect` | Multi-selection support |
+
+### Persistence
+
+| Interface | Purpose |
+|-----------|---------|
+| `IVsPersistSolutionOpts` | Solution options persistence |
+| `IVsPersistSolutionProps` | Solution properties persistence |
+| `IVsSolutionPersistence` | Solution save/load |
+
+## IDebug* Interface Family
+
+### Core
+
+| Interface | Purpose |
+|-----------|---------|
+| `IDebugCoreServer2/3` | Debug server |
+| `IDebugSession2/3` | Debug session |
+| `IDebugEventCallback2` | Debug event notifications |
+
+### Engine
+
+| Interface | Purpose |
+|-----------|---------|
+| `IDebugEngine2/3` | Debug engine |
+
+### Process/Program
+
+| Interface | Purpose |
+|-----------|---------|
+| `IDebugProcess2` | Process management |
+| `IDebugProgram2` | Program debugging |
+| `IDebugProgramNode2` | Program tree node |
+
+### Execution
+
+| Interface | Purpose |
+|-----------|---------|
+| `IDebugThread2/3` | Thread debugging |
+| `IDebugStackFrame2` | Stack frame inspection |
+| `IDebugCodeContext2` | Code location |
+
+### Breakpoints
+
+| Interface | Purpose |
+|-----------|---------|
+| `IDebugBoundBreakpoint2` | Active breakpoint |
+| `IDebugPendingBreakpoint2` | Pending breakpoint |
+| `IDebugErrorBreakpoint2` | Failed breakpoint |
+
+## VSITEMID Architecture
+
+### Special Item IDs
+
+```csharp
+VSITEMID_NIL        = ((DWORD)-1)  // No nodes
+VSITEMID_ROOT       = ((DWORD)-2)  // Hierarchy root
+VSITEMID_SELECTION  = ((DWORD)-3)  // Selected items
+```
+
+Nodes are identified by `VSITEMID` + `IVsHierarchy` interface pairs. Nodes are NOT COM objects themselves - they use opaque cookies.
+
+## Language GUIDs
+
+```csharp
+guidCLang          // C language
+guidCPPLang        // C++ language
+guidVBLang         // VB.NET language
+guidCSharpLang     // C# language (implicit)
+guidFSharpLang     // F# language
+guidSQLLang        // SQL language
+guidJScriptLang    // JScript language
+guidVBScriptLang   // VBScript language
+```
+
+## Debug Engine GUIDs
+
+```csharp
+guidNativeOnlyEng           // Native-only engine
+guidCOMPlusOnlyEng          // Managed-only engine
+guidCOMPlusNativeEng        // Mixed-mode engine
+guidScriptEng               // Script engine
+guidSQLEng                  // SQL engine
+guidCoreSystemClrEng        // Core CLR engine
+```
+
+## Property Filters (IDebugProperty2)
+
+```csharp
+guidFilterLocals              // Local variables
+guidFilterAllLocals           // All locals
+guidFilterArgs                // Function arguments
+guidFilterLocalsPlusArgs      // Locals and arguments
+guidFilterRegisters           // CPU registers
+guidFilterThis                // 'this' pointer
+```
+
+## Error Codes
+
+### Edit & Continue
+
+| Code | Name |
+|------|------|
+| `0x80044001` | `E_ENC_REBUILD_FAIL` |
+| `0x80044002` | `E_ENC_COMMIT_FAIL` |
+| `0x80044003` | `E_ENC_APPLY_FAIL` |
+| `0x80044004` | `E_ENC_INTERNAL_ERROR` |
+
+### Text Buffer
+
+| Code | Name |
+|------|------|
+| `0x80044001` | `BUFFER_E_READONLY` |
+| `0x80044002` | `BUFFER_E_READONLY_REGION` |
+| `0x80044003` | `BUFFER_E_TIMEOUT` |
+| `0x80044004` | `BUFFER_E_LOCKED` |
+| `0x80044005` | `BUFFER_E_SCC_READONLY` |
+
+### Text View
+
+| Code | Name |
+|------|------|
+| `0x80044201` | `VIEW_E_NO_BOOKMARKS` |
+| `0x80044202` | `VIEW_E_NO_DEBUGGER` |
+| `0x80044204` | `VIEW_E_USERREADONLY` |
+| `0x80044205` | `VIEW_E_LOCATION_HIDDEN` |
+
+## Version Numbering
+
+IDL files use version numbers mapping to VS releases:
+
+| Version | Visual Studio |
+|---------|---------------|
+| 80 | VS 2005 |
+| 90 | VS 2008 |
+| 100 | VS 2010 |
+| 110 | VS 2012 |
+| 120 | VS 2013 |
+| 140 | VS 2015 |
+| 150 | VS 2017 |
+| 160 | VS 2019 |
+| 170 | VS 2022 |

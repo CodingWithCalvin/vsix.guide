@@ -1,0 +1,172 @@
+---
+title: Packaging and Publishing
+description: Learn to create VSIX packages and publish to the Visual Studio Marketplace.
+category: getting-started
+order: 6
+---
+
+import Callout from '@components/Callout.astro';
+
+Once your extension is ready, you can package it as a VSIX file and optionally publish it to the Visual Studio Marketplace.
+
+## Creating a VSIX Package
+
+### Build in Release Mode
+
+1. Set the configuration to **Release**
+2. Build the solution (Ctrl+Shift+B)
+3. Find the VSIX file in `bin\Release\YourExtension.vsix`
+
+<Callout type="tip">
+Always build in Release mode for distribution. Debug builds include extra symbols and aren't optimized.
+</Callout>
+
+### Update the Manifest
+
+Before publishing, update your `source.extension.vsixmanifest`:
+
+```xml
+<Metadata>
+  <Identity Id="YourExtension.YourCompany.UniqueGuid"
+            Version="1.0.0"
+            Language="en-US"
+            Publisher="Your Name or Company" />
+  <DisplayName>Your Extension Name</DisplayName>
+  <Description xml:space="preserve">
+A clear, compelling description of what your extension does.
+
+Features:
+- Feature 1
+- Feature 2
+- Feature 3
+  </Description>
+  <MoreInfo>https://github.com/yourrepo</MoreInfo>
+  <License>LICENSE.txt</License>
+  <Icon>Resources\icon.png</Icon>
+  <PreviewImage>Resources\preview.png</PreviewImage>
+  <Tags>your, tags, here</Tags>
+</Metadata>
+```
+
+### Add Assets
+
+Include these files in your project:
+
+| File | Purpose | Requirements |
+|------|---------|--------------|
+| `icon.png` | Extension icon | 128x128 or 256x256 pixels |
+| `preview.png` | Marketplace preview | 200x200 minimum |
+| `LICENSE.txt` | License text | Required for Marketplace |
+| `README.md` | Documentation | Optional but recommended |
+
+Set **Build Action** to "Content" and **Include in VSIX** to "true".
+
+## Installing Locally
+
+### Double-Click Install
+
+Simply double-click the `.vsix` file to install:
+
+1. Close all VS instances
+2. Double-click `YourExtension.vsix`
+3. Click **Install** in the VSIX Installer
+4. Restart Visual Studio
+
+### Command Line Install
+
+Use VSIXInstaller.exe for automation:
+
+```powershell
+# Install
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\VSIXInstaller.exe" /quiet YourExtension.vsix
+
+# Uninstall
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\VSIXInstaller.exe" /uninstall:YourExtension.UniqueGuid
+```
+
+## Publishing to the Marketplace
+
+### Create a Publisher Account
+
+1. Go to [Visual Studio Marketplace Publisher Portal](https://marketplace.visualstudio.com/manage/publishers)
+2. Sign in with your Microsoft account
+3. Create a new publisher with a unique identifier
+
+### Prepare Your Submission
+
+Gather the required information:
+
+- **Categories** - Choose up to 3 categories
+- **Pricing** - Free or Paid (requires Azure account)
+- **Q&A** - Enable or disable community questions
+- **Repository URL** - Link to source code (optional)
+
+### Upload Your Extension
+
+1. Go to [Publish Extension](https://marketplace.visualstudio.com/manage/publishers)
+2. Click your publisher name
+3. Click **New Extension > Visual Studio**
+4. Upload your `.vsix` file
+5. Fill in the submission form
+6. Click **Publish**
+
+<Callout type="note">
+New extensions and updates go through a validation process that typically takes 1-2 business days.
+</Callout>
+
+## Versioning
+
+Use semantic versioning for your extension:
+
+- **Major.Minor.Patch** (e.g., 1.2.3)
+- Increment **Major** for breaking changes
+- Increment **Minor** for new features
+- Increment **Patch** for bug fixes
+
+Update the version in `source.extension.vsixmanifest`:
+
+```xml
+<Identity Id="..." Version="1.2.3" ... />
+```
+
+## Update Notifications
+
+Users are automatically notified of updates through:
+
+- **Extensions > Manage Extensions** - Shows available updates
+- **Notification hub** - Toast notifications for updates
+
+## Private Distribution
+
+For enterprise or private distribution:
+
+### Private Gallery
+
+Host a private Atom feed:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>My Private Extensions</title>
+  <id>MyPrivateGallery</id>
+  <entry>
+    <id>YourExtension</id>
+    <title>Your Extension</title>
+    <link rel="alternate" href="https://yourserver/YourExtension.vsix"/>
+    <Vsix xmlns="http://schemas.microsoft.com/developer/vsx-syndication-schema/2010">
+      <Id>YourExtension.UniqueGuid</Id>
+      <Version>1.0.0</Version>
+    </Vsix>
+  </entry>
+</feed>
+```
+
+### Add Private Gallery to VS
+
+1. Go to **Tools > Options > Environment > Extensions**
+2. Click **Add** under Additional Extension Galleries
+3. Enter your feed URL
+
+## Next Steps
+
+Congratulations! You've completed the Getting Started section. Continue to [Fundamentals](/docs/fundamentals/overview) to learn about VS architecture and services.

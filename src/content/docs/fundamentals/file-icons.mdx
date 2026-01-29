@@ -1,0 +1,357 @@
+---
+title: Custom File Icons
+description: Add custom icons for file types in Solution Explorer and other VS windows.
+category: fundamentals
+order: 10
+---
+
+import Callout from '@components/Callout.astro';
+
+Visual Studio displays icons for files, projects, and items throughout the IDE. You can provide custom icons for your file types in Solution Explorer, Open File dialogs, and other locations.
+
+## Icon Approaches
+
+| Approach | Use Case | Complexity |
+|----------|----------|------------|
+| Image Monikers | Recommended for most scenarios | Low |
+| Image Catalog | Custom icon library | Medium |
+| IVsHierarchy | Full control over project icons | High |
+
+## Using Built-in Image Monikers
+
+VS includes thousands of built-in icons via the **KnownMonikers** catalog. Use these when possible for consistency.
+
+### Browsing Available Icons
+
+Install **Extensibility Essentials** to get the **KnownMonikers Explorer**:
+1. View > Other Windows > KnownMonikers Explorer
+2. Search for icons by name
+3. Copy the moniker name for use in code
+
+### Using KnownMonikers in Code
+
+```csharp
+using Microsoft.VisualStudio.Imaging;
+using Microsoft.VisualStudio.Imaging.Interop;
+
+// Get a known moniker
+ImageMoniker icon = KnownMonikers.Document;
+ImageMoniker csharpIcon = KnownMonikers.CSFile;
+ImageMoniker folderIcon = KnownMonikers.FolderClosed;
+```
+
+### In Tool Windows
+
+```csharp
+public class MyToolWindow : ToolWindowPane
+{
+    public MyToolWindow() : base(null)
+    {
+        Caption = "My Tool Window";
+        BitmapImageMoniker = KnownMonikers.Settings;
+    }
+}
+```
+
+### In VSCT Files
+
+```xml
+<Button guid="guidMyPackageCmdSet" id="MyCommand" priority="0x0100" type="Button">
+  <Parent guid="guidMyPackageCmdSet" id="MyMenuGroup"/>
+  <Icon guid="ImageCatalogGuid" id="Settings"/>
+  <CommandFlag>IconIsMoniker</CommandFlag>
+  <Strings>
+    <ButtonText>My Command</ButtonText>
+  </Strings>
+</Button>
+```
+
+<Callout type="note">
+You must include `<CommandFlag>IconIsMoniker</CommandFlag>` when using image catalog icons in VSCT.
+</Callout>
+
+## Creating Custom Icons
+
+### Image Manifest (.imagemanifest)
+
+Define custom icons in an image manifest:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<ImageManifest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+               xmlns="http://schemas.microsoft.com/VisualStudio/ImageManifestSchema/2014">
+  <Symbols>
+    <String Name="AssetsFolder" Value="Assets" />
+    <Guid Name="MyImageGuid" Value="{12345678-1234-1234-1234-123456789012}" />
+    <ID Name="MyFileIcon" Value="1" />
+    <ID Name="MyProjectIcon" Value="2" />
+  </Symbols>
+
+  <Images>
+    <Image Guid="$(MyImageGuid)" ID="$(MyFileIcon)">
+      <Source Uri="$(AssetsFolder)/MyFileIcon.png">
+        <Size Value="16" />
+      </Source>
+      <Source Uri="$(AssetsFolder)/MyFileIcon@2x.png">
+        <Size Value="32" />
+      </Source>
+    </Image>
+
+    <Image Guid="$(MyImageGuid)" ID="$(MyProjectIcon)">
+      <Source Uri="$(AssetsFolder)/MyProjectIcon.png">
+        <Size Value="16" />
+      </Source>
+    </Image>
+  </Images>
+</ImageManifest>
+```
+
+### Image Requirements
+
+| Size | DPI | Usage |
+|------|-----|-------|
+| 16x16 | 96 | Standard displays |
+| 24x24 | 96 | Some toolbars |
+| 32x32 | 96 | Large icons, 200% DPI |
+| 256x256 | 96 | High DPI scenarios |
+
+Provide multiple sizes for best quality across display configurations.
+
+### Image Format
+
+- Use **PNG** with transparency
+- Support both light and dark themes
+- Consider high contrast themes
+
+### Including in Project
+
+```xml
+<ItemGroup>
+  <Content Include="Assets\*.png">
+    <IncludeInVSIX>true</IncludeInVSIX>
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+  </Content>
+  <Content Include="MyImages.imagemanifest">
+    <IncludeInVSIX>true</IncludeInVSIX>
+  </Content>
+</ItemGroup>
+```
+
+### VSIX Manifest Asset
+
+```xml
+<Asset Type="Microsoft.VisualStudio.ImageManifest"
+       Path="MyImages.imagemanifest"
+       d:Source="File" />
+```
+
+## Accessing Custom Icons
+
+### Define Monikers in Code
+
+```csharp
+public static class MyImageMonikers
+{
+    private static readonly Guid ManifestGuid = new Guid("{12345678-1234-1234-1234-123456789012}");
+
+    public static ImageMoniker MyFileIcon => new ImageMoniker { Guid = ManifestGuid, Id = 1 };
+    public static ImageMoniker MyProjectIcon => new ImageMoniker { Guid = ManifestGuid, Id = 2 };
+}
+```
+
+### Use in Tool Windows
+
+```csharp
+public class MyToolWindow : ToolWindowPane
+{
+    public MyToolWindow() : base(null)
+    {
+        Caption = "My Tool Window";
+        BitmapImageMoniker = MyImageMonikers.MyProjectIcon;
+    }
+}
+```
+
+## File Type Icons in Solution Explorer
+
+### Register File Extension Icons
+
+In your `.pkgdef`:
+
+```
+; Associate icon with file extension
+[$RootKey$\ShellFileAssociations\.mylang]
+"DefaultIconMoniker"="{MyImageGuid}:1"
+
+; Or use a known moniker
+[$RootKey$\ShellFileAssociations\.config]
+"DefaultIconMoniker"="{AE27A6B0-E345-4288-96DF-5EAF394EE369}:3395"
+```
+
+### IVsHierarchy for Project Items
+
+For full control, implement icon resolution in your hierarchy:
+
+```csharp
+public class MyProjectNode : HierarchyNode
+{
+    public override object GetIconHandle(bool open)
+    {
+        // Return icon handle based on item type
+        if (IsFolder)
+            return open ? FolderOpenIcon : FolderClosedIcon;
+
+        return GetFileIcon(FileName);
+    }
+
+    public override ImageMoniker GetIconMoniker(bool open)
+    {
+        var extension = Path.GetExtension(FileName)?.ToLowerInvariant();
+
+        return extension switch
+        {
+            ".mylang" => MyImageMonikers.MyFileIcon,
+            ".myconfig" => KnownMonikers.ConfigurationFile,
+            _ => KnownMonikers.Document
+        };
+    }
+}
+```
+
+### IVsImageService2
+
+Get icon images programmatically:
+
+```csharp
+var imageService = await VS.GetServiceAsync<SVsImageService, IVsImageService2>();
+
+// Get image attributes
+var attributes = new ImageAttributes
+{
+    StructSize = Marshal.SizeOf(typeof(ImageAttributes)),
+    ImageType = (uint)_UIImageType.IT_Bitmap,
+    Format = (uint)_UIDataFormat.DF_WPF,
+    LogicalWidth = 16,
+    LogicalHeight = 16,
+    Flags = (uint)_ImageAttributesFlags.IAF_RequiredFlags
+};
+
+// Get the image
+IVsUIObject uiObject = imageService.GetImage(KnownMonikers.Document, attributes);
+uiObject.get_Data(out object data);
+var bitmapSource = data as BitmapSource;
+```
+
+## Theme-Aware Icons
+
+### Providing Theme Variants
+
+In your image manifest, specify theme-specific sources:
+
+```xml
+<Image Guid="$(MyImageGuid)" ID="$(MyFileIcon)">
+  <!-- Light theme -->
+  <Source Uri="$(AssetsFolder)/Light/MyFileIcon.png" Background="FFFFFFFF">
+    <Size Value="16" />
+  </Source>
+  <!-- Dark theme -->
+  <Source Uri="$(AssetsFolder)/Dark/MyFileIcon.png" Background="FF1E1E1E">
+    <Size Value="16" />
+  </Source>
+  <!-- High Contrast -->
+  <Source Uri="$(AssetsFolder)/HighContrast/MyFileIcon.png" Background="HC">
+    <Size Value="16" />
+  </Source>
+</Image>
+```
+
+### Background Attribute Values
+
+| Value | Theme |
+|-------|-------|
+| `FFFFFFFF` | Light |
+| `FF1E1E1E` | Dark |
+| `HC` | High Contrast |
+
+<Callout type="tip">
+VS automatically selects the appropriate image variant based on the current theme.
+</Callout>
+
+## Complete Example
+
+### MyImages.imagemanifest
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<ImageManifest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+               xmlns="http://schemas.microsoft.com/VisualStudio/ImageManifestSchema/2014">
+  <Symbols>
+    <String Name="Assets" Value="Assets" />
+    <Guid Name="MyImages" Value="{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}" />
+    <ID Name="MyLangFile" Value="1" />
+    <ID Name="MyLangProject" Value="2" />
+    <ID Name="MyLangFolder" Value="3" />
+  </Symbols>
+
+  <Images>
+    <Image Guid="$(MyImages)" ID="$(MyLangFile)">
+      <Source Uri="$(Assets)/Light/mylang-file-16.png" Background="FFFFFFFF">
+        <Size Value="16" />
+      </Source>
+      <Source Uri="$(Assets)/Dark/mylang-file-16.png" Background="FF1E1E1E">
+        <Size Value="16" />
+      </Source>
+    </Image>
+
+    <Image Guid="$(MyImages)" ID="$(MyLangProject)">
+      <Source Uri="$(Assets)/Light/mylang-project-16.png" Background="FFFFFFFF">
+        <Size Value="16" />
+      </Source>
+      <Source Uri="$(Assets)/Dark/mylang-project-16.png" Background="FF1E1E1E">
+        <Size Value="16" />
+      </Source>
+    </Image>
+  </Images>
+</ImageManifest>
+```
+
+### ImageMonikers.cs
+
+```csharp
+using Microsoft.VisualStudio.Imaging.Interop;
+using System;
+
+namespace MyExtension
+{
+    public static class MyImageMonikers
+    {
+        private static readonly Guid ImageGuid =
+            new Guid("{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}");
+
+        public static ImageMoniker MyLangFile =>
+            new ImageMoniker { Guid = ImageGuid, Id = 1 };
+
+        public static ImageMoniker MyLangProject =>
+            new ImageMoniker { Guid = ImageGuid, Id = 2 };
+
+        public static ImageMoniker MyLangFolder =>
+            new ImageMoniker { Guid = ImageGuid, Id = 3 };
+    }
+}
+```
+
+### Registration in .pkgdef
+
+```
+; File extension icon
+[$RootKey$\ShellFileAssociations\.mylang]
+"DefaultIconMoniker"="{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}:1"
+```
+
+## Resources
+
+- [Image Service and Catalog](https://learn.microsoft.com/visualstudio/extensibility/image-service-and-catalog)
+- [KnownMonikers Reference](https://learn.microsoft.com/dotnet/api/microsoft.visualstudio.imaging.knownmonikers)
+- [VSIX Image Library](https://www.vsixgallery.com/extension/VsixImageLibrary.f985d359-8ad1-4330-b41b-4e95584f47b6)

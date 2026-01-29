@@ -1,0 +1,165 @@
+---
+title: Your First Extension
+description: Create a Hello World Visual Studio extension with a custom menu command.
+category: getting-started
+order: 3
+---
+
+import Callout from '@components/Callout.astro';
+
+Let's create a simple extension that adds a "Hello World" command to Visual Studio.
+
+## Create the Project
+
+1. Open Visual Studio 2022
+2. Go to **File > New > Project**
+3. Search for "VSIX" and select **VSIX Project w/ Command (Community)**
+4. Name it `HelloWorldExtension`
+5. Click **Create**
+
+<Callout type="note">
+If you don't see the Community templates, you can use the standard "VSIX Project" template and add a command manually.
+</Callout>
+
+## Understanding the Generated Code
+
+The template creates several files. Let's examine the key ones:
+
+### MyCommand.cs
+
+This file contains your command's logic:
+
+```csharp
+using System;
+using Community.VisualStudio.Toolkit;
+using Microsoft.VisualStudio.Shell;
+using Task = System.Threading.Tasks.Task;
+
+namespace HelloWorldExtension
+{
+    [Command(PackageIds.MyCommand)]
+    internal sealed class MyCommand : BaseCommand<MyCommand>
+    {
+        protected override async Task ExecuteAsync(OleMenuCmdEventArgs e)
+        {
+            await VS.MessageBox.ShowWarningAsync(
+                "HelloWorldExtension",
+                "Hello, Visual Studio!");
+        }
+    }
+}
+```
+
+The key parts are:
+- `[Command]` attribute links this class to a command ID
+- `BaseCommand<T>` provides the command infrastructure
+- `ExecuteAsync` contains your command's logic
+
+### HelloWorldExtensionPackage.cs
+
+This is your extension's entry point:
+
+```csharp
+using System;
+using System.Runtime.InteropServices;
+using System.Threading;
+using Community.VisualStudio.Toolkit;
+using Microsoft.VisualStudio.Shell;
+using Task = System.Threading.Tasks.Task;
+
+namespace HelloWorldExtension
+{
+    [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
+    [Guid(PackageGuids.HelloWorldExtensionString)]
+    [ProvideMenuResource("Menus.ctmenu", 1)]
+    public sealed class HelloWorldExtensionPackage : ToolkitPackage
+    {
+        protected override async Task InitializeAsync(
+            CancellationToken cancellationToken,
+            IProgress<ServiceProgressData> progress)
+        {
+            await this.RegisterCommandsAsync();
+        }
+    }
+}
+```
+
+Key attributes:
+- `[PackageRegistration]` - Registers the package with VS
+- `[ProvideMenuResource]` - Links to the command table
+- `ToolkitPackage` - Base class from Community Toolkit
+
+### VSCommandTable.vsct
+
+This XML file defines your command's placement in VS menus:
+
+```xml
+<Commands package="guidHelloWorldExtensionPackage">
+  <Groups>
+    <Group guid="guidHelloWorldExtensionPackageCmdSet"
+           id="MyMenuGroup"
+           priority="0x0600">
+      <Parent guid="guidSHLMainMenu" id="IDM_VS_MENU_TOOLS"/>
+    </Group>
+  </Groups>
+
+  <Buttons>
+    <Button guid="guidHelloWorldExtensionPackageCmdSet"
+            id="MyCommand"
+            priority="0x0100"
+            type="Button">
+      <Parent guid="guidHelloWorldExtensionPackageCmdSet" id="MyMenuGroup" />
+      <Icon guid="guidImages" id="bmpPic1" />
+      <Strings>
+        <ButtonText>My Command</ButtonText>
+      </Strings>
+    </Button>
+  </Buttons>
+</Commands>
+```
+
+This places your command in the **Tools** menu.
+
+## Run the Extension
+
+1. Press **F5** to start debugging
+2. A new Visual Studio instance (the "Experimental Instance") opens
+3. Go to **Tools > My Command**
+4. You should see a message box saying "Hello, Visual Studio!"
+
+<Callout type="tip">
+The Experimental Instance is a separate VS configuration used for testing extensions. It won't affect your main VS settings.
+</Callout>
+
+## Customize the Command
+
+Let's make the command more interesting:
+
+```csharp
+protected override async Task ExecuteAsync(OleMenuCmdEventArgs e)
+{
+    // Get the active document
+    var docView = await VS.Documents.GetActiveDocumentViewAsync();
+
+    if (docView?.TextView == null)
+    {
+        await VS.MessageBox.ShowWarningAsync(
+            "HelloWorldExtension",
+            "No active document!");
+        return;
+    }
+
+    // Get the file name
+    var fileName = docView.FilePath;
+
+    await VS.MessageBox.ShowAsync(
+        "HelloWorldExtension",
+        $"Current file: {fileName}");
+}
+```
+
+This version displays the current file name instead of a static message.
+
+## Next Steps
+
+Now that you have a working extension, learn about the [Project Structure](/docs/getting-started/project-structure) to understand all the files in your VSIX project.

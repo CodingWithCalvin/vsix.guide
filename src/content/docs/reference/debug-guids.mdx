@@ -1,0 +1,119 @@
+---
+title: Debug Engine GUIDs
+description: Reference for debug engine, language, and port supplier GUIDs.
+category: reference
+order: 6
+---
+
+This reference documents the GUIDs used for Visual Studio debugging infrastructure.
+
+## Debug Engine GUIDs
+
+### Native Engines
+
+| Engine | GUID | Description |
+|--------|------|-------------|
+| `guidNativeOnlyEng` | `{3B476D35-A401-11D2-AAD4-00C04F990171}` | Native-only debugging |
+| `guidCOMPlusNativeEng` | `{92EF0900-2251-11D2-B72E-0000F87572EF}` | Mixed-mode (native + managed) |
+
+### Managed Engines
+
+| Engine | GUID | Description |
+|--------|------|-------------|
+| `guidCOMPlusOnlyEng` | `{449EC4CC-30D2-4032-9256-EE18EB41B62B}` | Managed-only (.NET Framework) |
+| `guidCOMPlusOnlyEng2` | `{5FFF7536-0C87-462D-8FD2-7971D948E6DC}` | Managed v2 |
+| `guidCOMPlusOnlyEng4` | `{FB0D4648-F776-4980-95F8-BB7F36EBC1EE}` | Managed v4 |
+| `guidCoreSystemClrEng` | `{A9A5F4D0-3FBF-4BE7-B2EF-05CC14A3C6C0}` | Core CLR engine |
+
+### Script Engines
+
+| Engine | GUID | Description |
+|--------|------|-------------|
+| `guidScriptEng` | `{F200A7E7-DEA5-11D0-B854-00A0244A1DE2}` | Script debugging |
+
+### SQL Engines
+
+| Engine | GUID | Description |
+|--------|------|-------------|
+| `guidSQLEng` | `{1202F5B4-3522-4149-BAD8-58B2079D704F}` | SQL debugging |
+| `guidSQLEng2` | `{25C15B9E-0D4A-4CA7-93C2-FC77F55D4DD8}` | SQL debugging v2 |
+| `guidCOMPlusSQLLocalEng` | `{B1911DD6-84F2-11D3-838C-00C04F790D2A}` | SQL local |
+| `guidCOMPlusSQLRemoteEng` | `{B1911DD7-84F2-11D3-838C-00C04F790D2A}` | SQL remote |
+
+### Other Engines
+
+| Engine | GUID | Description |
+|--------|------|-------------|
+| `guidSilverlightEng` | `{90C1A7CE-82FF-4BB0-9D43-E64BBCEE6C00}` | Silverlight |
+| `GUID_WorkflowDebugEngine` | `{3B7A7024-AF3B-4E8F-A1A7-9E81D6DDC07B}` | Workflow debugging |
+| `guidMono` | `{1CDEDDD6-C3E2-440F-93C2-65D5B4DF6CAB}` | Mono runtime |
+| `guidProteusEng` | `{98C92BFE-9C77-442A-8A75-51E8F3BE3774}` | Proteus |
+| `guidReflectionEng` | `{D0855CFA-E5DD-4E21-9019-F6CE6E6A6D03}` | Reflection |
+| `guidTraceReplayEng` | `{8B4C3028-DCBC-4FC1-A6A3-FCE0E0FC8332}` | Trace replay |
+
+## Language GUIDs
+
+| Language | GUID |
+|----------|------|
+| `guidCLang` | `{63A08714-FC37-11D2-904C-00C04FA302A1}` |
+| `guidCPPLang` | `{3A12D0B7-C26C-11D0-B442-00A0244A1DD2}` |
+| `guidVBLang` | `{3A12D0B8-C26C-11D0-B442-00A0244A1DD2}` |
+| `guidVBScriptLang` | `{3A12D0B6-C26C-11D0-B442-00A0244A1DD2}` |
+| `guidJScriptLang` | `{3A12D0B4-C26C-11D0-B442-00A0244A1DD2}` |
+| `guidSQLLang` | `{5AE86B97-75D5-408B-93EC-BD0DDB89CBFB}` |
+| `guidScriptLang` | `{F7FA31DA-D666-11D2-850C-00C04F990501}` |
+| `guidFSharpLang` | `{91A04A73-4F2C-4E7C-AD38-C1A68E7DA05C}` |
+| `guidManagedCLang` | `{3A12D0B5-C26C-11D0-B442-00A0244A1DD2}` |
+| `guidManagedCPPLang` | `{3A12D0B3-C26C-11D0-B442-00A0244A1DD2}` |
+| `guidFortranLang` | `{A42C6B90-9EE4-11D3-838C-00C04F790D2A}` |
+
+## Port Supplier GUIDs
+
+| Supplier | GUID | Description |
+|----------|------|-------------|
+| `guidLocalPortSupplier` | `{708C1ECA-FF48-11D2-904F-00C04FA302A1}` | Local machine |
+| `guidNativePortSupplier` | `{3B476D38-A401-11D2-AAD4-00C04F990171}` | Native code |
+| `guidNativePipePortSupplier` | `{3B476D39-A401-11D2-AAD4-00C04F990171}` | Native pipe |
+| `guidEmbeddedCLRPortSupplier` | `{C2FBFD67-C10D-4EDD-AE87-C7BE1BA5CDBC}` | Embedded CLR |
+| `guidDockerWindowsPortSupplier` | `{D2F72E55-D488-4D99-B008-CC81F4D86AE8}` | Docker Windows |
+
+## Property Filters
+
+For `IDebugProperty2` visualizers:
+
+| Filter | GUID | Description |
+|--------|------|-------------|
+| `guidFilterLocals` | `{B200F725-E725-11D0-B881-00A0244A1DE2}` | Local variables |
+| `guidFilterAllLocals` | `{196DB21F-5F22-45A9-B5A3-32CDDB30DB06}` | All locals |
+| `guidFilterArgs` | `{804BCCEA-0475-4AE7-8A46-1862688AB863}` | Function arguments |
+| `guidFilterLocalsPlusArgs` | `{E74721BB-10C0-40F5-807F-920D37F95419}` | Locals + arguments |
+| `guidFilterAllLocalsPlusArgs` | `{939729A8-4CB0-4647-9831-7FF465240D5F}` | All locals + arguments |
+| `guidFilterRegisters` | `{223AE797-BD09-4F28-BBAB-37D0ED7521D6}` | CPU registers |
+| `guidFilterThis` | `{7DD86B82-E0CE-11D2-8FD6-00C04F990F3B}` | 'this' pointer |
+| `guidFilterAutoRegisters` | `{FD73C1D7-7685-4B72-A5F6-3F489FA8A74D}` | Auto-registers |
+
+## Exception Categories
+
+| Category | GUID | Description |
+|----------|------|-------------|
+| Default CLR exceptions | `{449EC4CC-30D2-4032-9256-EE18EB41B62B}` | .NET exceptions |
+| Win32 exceptions | `{3B476D35-A401-11D2-AAD4-00C04F990171}` | Native exceptions |
+| JavaScript exceptions | `{26BC6BDB-C3FF-4E1B-B33B-0C80B2ADB02F}` | JS exceptions |
+
+## Symbol Store GUIDs
+
+| Store | GUID | Description |
+|-------|------|-------------|
+| PDB format | `{97F9C4A9-3B20-4C1D-A89B-E8D0F5C6D1E4}` | Program database |
+| Portable PDB | `{97F9C4AA-3B20-4C1D-A89B-E8D0F5C6D1E4}` | .NET Core/5+ PDBs |
+
+## Usage Example
+
+```csharp
+// Check if debugging managed code
+var debugger = await VS.Services.GetDebuggerAsync() as IVsDebugger3;
+debugger.GetDebugEngines(out GUID[] engines);
+
+var managedEngineGuid = new Guid("{449EC4CC-30D2-4032-9256-EE18EB41B62B}");
+bool isManagedDebugging = engines.Contains(managedEngineGuid);
+```

@@ -1,0 +1,23 @@
+{
+  "name": "vsix-guide",
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/mdx": "^4.0.2",
+    "@astrojs/sitemap": "^3.2.1",
+    "@tailwindcss/typography": "^0.5.19",
+    "@tailwindcss/vite": "^4.1.18",
+    "astro": "^5.1.1",
+    "tailwindcss": "^4.1.18"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

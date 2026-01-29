@@ -1,0 +1,102 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import { getCollection } from 'astro:content';
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description } = Astro.props;
+
+const docs = await getCollection('docs', ({ data }) => !data.draft);
+
+// Group docs by category
+const categories = [
+  { id: 'getting-started', label: 'Getting Started' },
+  { id: 'fundamentals', label: 'Fundamentals' },
+  { id: 'advanced', label: 'Advanced' },
+  { id: 'reference', label: 'Reference' },
+];
+
+const groupedDocs = categories.map((category) => {
+  const categoryDocs = docs
+    .filter((doc) => doc.data.category === category.id)
+    .sort((a, b) => (a.data.order || 999) - (b.data.order || 999));
+  return { ...category, docs: categoryDocs };
+});
+
+// Normalize path for comparison (remove trailing slash)
+const currentPath = Astro.url.pathname.replace(/\/$/, '');
+---
+
+<BaseLayout title={title} description={description}>
+  <div class="max-w-7xl mx-auto px-4 py-8">
+    <div class="flex gap-8">
+      <!-- Sidebar -->
+      <aside class="hidden lg:block w-64 flex-shrink-0">
+        <nav class="sticky top-8">
+          <div class="space-y-1">
+            {groupedDocs.map((category) => (
+              category.docs.length > 0 && (
+                <>
+                  <div class="sidebar-category">{category.label}</div>
+                  {category.docs.map((doc) => {
+                    const href = `/docs/${doc.id}`;
+                    const isActive = currentPath === href;
+                    return (
+                      <a
+                        href={href}
+                        class:list={['sidebar-link', { active: isActive }]}
+                      >
+                        {doc.data.title}
+                      </a>
+                    );
+                  })}
+                </>
+              )
+            ))}
+          </div>
+        </nav>
+      </aside>
+
+      <!-- Mobile navigation -->
+      <div class="lg:hidden mb-6 w-full">
+        <details class="bg-background-2 rounded-lg border border-border">
+          <summary class="px-4 py-3 cursor-pointer font-medium">
+            Documentation Menu
+          </summary>
+          <nav class="p-2 border-t border-border">
+            {groupedDocs.map((category) => (
+              category.docs.length > 0 && (
+                <>
+                  <div class="sidebar-category">{category.label}</div>
+                  {category.docs.map((doc) => {
+                    const href = `/docs/${doc.id}`;
+                    const isActive = currentPath === href;
+                    return (
+                      <a
+                        href={href}
+                        class:list={['sidebar-link', { active: isActive }]}
+                      >
+                        {doc.data.title}
+                      </a>
+                    );
+                  })}
+                </>
+              )
+            ))}
+          </nav>
+        </details>
+      </div>
+
+      <!-- Main content -->
+      <article class="flex-1 min-w-0">
+        <div class="prose">
+          <h1>{title}</h1>
+          <slot />
+        </div>
+      </article>
+    </div>
+  </div>
+</BaseLayout>

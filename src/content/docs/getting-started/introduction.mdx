@@ -1,0 +1,62 @@
+---
+title: Introduction
+description: Learn what Visual Studio extensions are and what you can build with them.
+category: getting-started
+order: 1
+---
+
+import Callout from '@components/Callout.astro';
+
+Visual Studio extensions (VSIX packages) allow you to customize and enhance the Visual Studio IDE. Whether you want to add new commands, tool windows, editor features, or integrate with external services, extensions give you full access to Visual Studio's extensibility APIs.
+
+## What Can You Build?
+
+Visual Studio extensions can add or modify almost any aspect of the IDE:
+
+- **Commands and Menus** - Add custom commands to menus, toolbars, and context menus
+- **Tool Windows** - Create dockable panels for custom UI
+- **Editor Extensions** - Add syntax highlighting, IntelliSense, code actions, and more
+- **Project Templates** - Create new project and item templates
+- **Options Pages** - Add configuration pages to Tools > Options
+- **Debugger Integration** - Extend the debugging experience
+- **Source Control** - Integrate with version control systems
+
+## The VSIX Package
+
+Extensions are distributed as `.vsix` files, which are ZIP archives containing:
+
+- **Extension manifest** (`extension.vsixmanifest`) - Metadata about your extension
+- **Compiled assemblies** - Your extension's DLLs
+- **Resources** - Images, templates, and other assets
+- **Dependencies** - Required SDK assemblies
+
+<Callout type="note">
+VSIX packages can be installed locally or published to the [Visual Studio Marketplace](https://marketplace.visualstudio.com/) for others to download.
+</Callout>
+
+## Extension Types
+
+There are two main approaches to building VS extensions:
+
+### Traditional (Interop-based)
+
+Uses COM interfaces and the legacy Visual Studio SDK. This approach:
+- Provides the deepest access to VS internals
+- Works with all VS versions
+- Requires more boilerplate code
+
+### Community Toolkit (Modern)
+
+The [Community.VisualStudio.Toolkit](https://github.com/VsixCommunity/Community.VisualStudio.Toolkit) simplifies extension development:
+- Cleaner, modern C# APIs
+- Async-first design
+- Less boilerplate code
+- Great for most extension scenarios
+
+<Callout type="tip">
+For new extensions, we recommend starting with the Community Toolkit. You can always drop down to the lower-level APIs when needed.
+</Callout>
+
+## Next Steps
+
+Ready to start building? Continue to [Prerequisites](/docs/getting-started/prerequisites) to set up your development environment.

@@ -1,0 +1,457 @@
+---
+title: Language Services
+description: Build complete language support with IntelliSense, syntax highlighting, and code navigation.
+category: advanced
+order: 3
+---
+
+import Callout from '@components/Callout.astro';
+
+Language services provide rich editor features for programming languages: syntax highlighting, IntelliSense, error squiggles, code navigation, and more. VS supports both traditional language services and the modern Language Server Protocol (LSP).
+
+## Approaches
+
+### Traditional Language Service
+
+Direct integration with VS editor APIs:
+- Deep VS integration
+- Requires significant implementation
+- Best for VS-specific features
+
+### Language Server Protocol (LSP)
+
+Standard protocol for language features:
+- Cross-editor compatibility
+- Separate process architecture
+- Easier to maintain
+
+## Language Server Protocol
+
+### Setting Up an LSP Client
+
+```csharp
+[Export(typeof(ILanguageClient))]
+[ContentType("myLanguage")]
+public class MyLanguageClient : ILanguageClient
+{
+    public string Name => "My Language Server";
+
+    public IEnumerable<string> ConfigurationSections => null;
+
+    public object InitializationOptions => null;
+
+    public IEnumerable<string> FilesToWatch => null;
+
+    public event AsyncEventHandler<EventArgs> StartAsync;
+    public event AsyncEventHandler<EventArgs> StopAsync;
+
+    public async Task<Connection> ActivateAsync(CancellationToken token)
+    {
+        var serverPath = Path.Combine(
+            Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location),
+            "server",
+            "myLanguageServer.exe");
+
+        var info = new ProcessStartInfo
+        {
+            FileName = serverPath,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        var process = Process.Start(info);
+
+        return new Connection(
+            process.StandardOutput.BaseStream,
+            process.StandardInput.BaseStream);
+    }
+
+    public async Task OnLoadedAsync()
+    {
+        await StartAsync.InvokeAsync(this, EventArgs.Empty);
+    }
+
+    public Task OnServerInitializedAsync()
+    {
+        return Task.CompletedTask;
+    }
+
+    public Task<InitializationFailureContext> OnServerInitializeFailedAsync(
+        ILanguageClientInitializationInfo initializationState)
+    {
+        return Task.FromResult(new InitializationFailureContext
+        {
+            FailureMessage = "Failed to initialize language server"
+        });
+    }
+}
+```
+
+### Content Type for LSP
+
+```csharp
+[Export]
+[Name("myLanguage")]
+[BaseDefinition(CodeRemoteContentDefinition.CodeRemoteContentTypeName)]
+internal static ContentTypeDefinition MyLanguageContentType;
+
+[Export]
+[FileExtension(".mylang")]
+[ContentType("myLanguage")]
+internal static FileExtensionToContentTypeDefinition MyLanguageFileExtension;
+```
+
+<Callout type="note">
+LSP requires the `Microsoft.VisualStudio.LanguageServer.Client` NuGet package.
+</Callout>
+
+## Traditional Language Service
+
+### Language Info
+
+Register your language:
+
+```csharp
+[ProvideLanguageService(typeof(MyLanguageService), "MyLanguage", 100,
+    CodeSense = true,
+    RequestStockColors = false,
+    EnableCommenting = true,
+    EnableFormatSelection = true)]
+[ProvideLanguageExtension(typeof(MyLanguageService), ".mylang")]
+public sealed class MyPackage : AsyncPackage { }
+```
+
+### Language Service Implementation
+
+```csharp
+[Guid("your-language-service-guid")]
+public class MyLanguageService : LanguageService
+{
+    private LanguagePreferences _preferences;
+
+    public override string Name => "MyLanguage";
+
+    public override LanguagePreferences GetLanguagePreferences()
+    {
+        if (_preferences == null)
+        {
+            _preferences = new LanguagePreferences(Site, typeof(MyLanguageService).GUID, Name);
+            _preferences.Init();
+        }
+        return _preferences;
+    }
+
+    public override IScanner GetScanner(IVsTextLines buffer)
+    {
+        return new MyScanner(buffer);
+    }
+
+    public override AuthoringScope ParseSource(ParseRequest req)
+    {
+        return new MyAuthoringScope(req);
+    }
+
+    public override string GetFormatFilterList()
+    {
+        return "MyLanguage Files (*.mylang)|*.mylang";
+    }
+}
+```
+
+### Scanner (Tokenizer)
+
+```csharp
+public class MyScanner : IScanner
+{
+    private string _source;
+    private int _offset;
+    private IVsTextLines _buffer;
+
+    public MyScanner(IVsTextLines buffer)
+    {
+        _buffer = buffer;
+    }
+
+    public void SetSource(string source, int offset)
+    {
+        _source = source;
+        _offset = offset;
+    }
+
+    public bool ScanTokenAndProvideInfoAboutIt(TokenInfo tokenInfo, ref int state)
+    {
+        if (_offset >= _source.Length) return false;
+
+        tokenInfo.StartIndex = _offset;
+
+        char c = _source[_offset];
+
+        if (char.IsWhiteSpace(c))
+        {
+            while (_offset < _source.Length && char.IsWhiteSpace(_source[_offset]))
+                _offset++;
+            tokenInfo.EndIndex = _offset - 1;
+            tokenInfo.Type = TokenType.WhiteSpace;
+            return true;
+        }
+
+        if (char.IsLetter(c))
+        {
+            while (_offset < _source.Length && char.IsLetterOrDigit(_source[_offset]))
+                _offset++;
+            tokenInfo.EndIndex = _offset - 1;
+
+            var word = _source.Substring(tokenInfo.StartIndex, _offset - tokenInfo.StartIndex);
+            if (IsKeyword(word))
+            {
+                tokenInfo.Type = TokenType.Keyword;
+                tokenInfo.Color = TokenColor.Keyword;
+            }
+            else
+            {
+                tokenInfo.Type = TokenType.Identifier;
+                tokenInfo.Color = TokenColor.Identifier;
+            }
+            return true;
+        }
+
+        // Handle other token types...
+        _offset++;
+        tokenInfo.EndIndex = _offset - 1;
+        tokenInfo.Type = TokenType.Unknown;
+        return true;
+    }
+
+    private bool IsKeyword(string word)
+    {
+        var keywords = new[] { "if", "else", "for", "while", "return", "function" };
+        return keywords.Contains(word.ToLower());
+    }
+}
+```
+
+### Authoring Scope (IntelliSense)
+
+```csharp
+public class MyAuthoringScope : AuthoringScope
+{
+    private ParseRequest _request;
+
+    public MyAuthoringScope(ParseRequest request)
+    {
+        _request = request;
+    }
+
+    public override Declarations GetDeclarations(
+        IVsTextView view,
+        int line,
+        int col,
+        TokenInfo info,
+        ParseReason reason)
+    {
+        if (reason == ParseReason.CompleteWord || reason == ParseReason.MemberSelect)
+        {
+            return new MyDeclarations();
+        }
+        return null;
+    }
+
+    public override Methods GetMethods(int line, int col, string name)
+    {
+        // Return method signatures for parameter help
+        return null;
+    }
+
+    public override string GetDataTipText(int line, int col, out TextSpan span)
+    {
+        span = new TextSpan();
+        // Return hover information
+        return null;
+    }
+
+    public override string Goto(
+        VSConstants.VSStd97CmdID cmd,
+        IVsTextView textView,
+        int line,
+        int col,
+        out TextSpan span)
+    {
+        span = new TextSpan();
+        // Handle Go To Definition, etc.
+        return null;
+    }
+}
+
+public class MyDeclarations : Declarations
+{
+    private List<Declaration> _declarations = new List<Declaration>
+    {
+        new Declaration { Name = "function", Description = "Declare a function" },
+        new Declaration { Name = "if", Description = "Conditional statement" },
+        new Declaration { Name = "for", Description = "For loop" }
+    };
+
+    public override int GetCount() => _declarations.Count;
+
+    public override string GetDisplayText(int index) => _declarations[index].Name;
+
+    public override string GetName(int index) => _declarations[index].Name;
+
+    public override string GetDescription(int index) => _declarations[index].Description;
+
+    public override int GetGlyph(int index) => (int)StandardGlyphGroup.GlyphKeyword;
+}
+```
+
+## Error Tagging
+
+Show error squiggles:
+
+```csharp
+[Export(typeof(ITaggerProvider))]
+[ContentType("myLanguage")]
+[TagType(typeof(IErrorTag))]
+internal sealed class ErrorTaggerProvider : ITaggerProvider
+{
+    public ITagger<T> CreateTagger<T>(ITextBuffer buffer) where T : ITag
+    {
+        return buffer.Properties.GetOrCreateSingletonProperty(
+            () => new ErrorTagger(buffer)) as ITagger<T>;
+    }
+}
+
+internal sealed class ErrorTagger : ITagger<IErrorTag>
+{
+    private readonly ITextBuffer _buffer;
+    private List<SnapshotSpan> _errorSpans = new List<SnapshotSpan>();
+
+    public ErrorTagger(ITextBuffer buffer)
+    {
+        _buffer = buffer;
+        _buffer.Changed += OnBufferChanged;
+        AnalyzeBuffer();
+    }
+
+    private void OnBufferChanged(object sender, TextContentChangedEventArgs e)
+    {
+        AnalyzeBuffer();
+    }
+
+    private void AnalyzeBuffer()
+    {
+        _errorSpans.Clear();
+
+        // Simple example: flag lines with "ERROR"
+        var snapshot = _buffer.CurrentSnapshot;
+        foreach (var line in snapshot.Lines)
+        {
+            var text = line.GetText();
+            if (text.Contains("ERROR"))
+            {
+                _errorSpans.Add(new SnapshotSpan(snapshot, line.Start, line.Length));
+            }
+        }
+
+        TagsChanged?.Invoke(this, new SnapshotSpanEventArgs(
+            new SnapshotSpan(snapshot, 0, snapshot.Length)));
+    }
+
+    public event EventHandler<SnapshotSpanEventArgs> TagsChanged;
+
+    public IEnumerable<ITagSpan<IErrorTag>> GetTags(NormalizedSnapshotSpanCollection spans)
+    {
+        foreach (var errorSpan in _errorSpans)
+        {
+            if (spans.Any(s => s.IntersectsWith(errorSpan)))
+            {
+                yield return new TagSpan<IErrorTag>(
+                    errorSpan,
+                    new ErrorTag(PredefinedErrorTypeNames.SyntaxError, "Error found"));
+            }
+        }
+    }
+}
+```
+
+## Code Navigation
+
+### Go To Definition
+
+```csharp
+[Export(typeof(ICommandHandler))]
+[ContentType("myLanguage")]
+[Name("GoToDefinitionHandler")]
+internal sealed class GoToDefinitionHandler : ICommandHandler<GoToDefinitionCommandArgs>
+{
+    public string DisplayName => "Go To Definition";
+
+    public bool ExecuteCommand(GoToDefinitionCommandArgs args, CommandExecutionContext context)
+    {
+        var textView = args.TextView;
+        var position = textView.Caret.Position.BufferPosition;
+
+        // Find symbol at position
+        var symbol = FindSymbolAtPosition(position);
+        if (symbol == null) return false;
+
+        // Navigate to definition
+        var definitionLocation = FindDefinition(symbol);
+        if (definitionLocation != null)
+        {
+            VS.Documents.OpenAsync(definitionLocation.FilePath);
+            // Navigate to line/column
+            return true;
+        }
+
+        return false;
+    }
+
+    public CommandState GetCommandState(GoToDefinitionCommandArgs args)
+    {
+        return CommandState.Available;
+    }
+}
+```
+
+## Brace Matching
+
+```csharp
+[Export(typeof(ITaggerProvider))]
+[ContentType("myLanguage")]
+[TagType(typeof(TextMarkerTag))]
+internal sealed class BraceMatchingTaggerProvider : ITaggerProvider
+{
+    public ITagger<T> CreateTagger<T>(ITextBuffer buffer) where T : ITag
+    {
+        return new BraceMatchingTagger(buffer) as ITagger<T>;
+    }
+}
+
+internal sealed class BraceMatchingTagger : ITagger<TextMarkerTag>
+{
+    private readonly ITextBuffer _buffer;
+    private readonly Dictionary<char, char> _braceMap = new Dictionary<char, char>
+    {
+        { '(', ')' }, { '{', '}' }, { '[', ']' }
+    };
+
+    public BraceMatchingTagger(ITextBuffer buffer)
+    {
+        _buffer = buffer;
+    }
+
+    public event EventHandler<SnapshotSpanEventArgs> TagsChanged;
+
+    public IEnumerable<ITagSpan<TextMarkerTag>> GetTags(NormalizedSnapshotSpanCollection spans)
+    {
+        // Implementation to find and highlight matching braces
+        yield break;
+    }
+}
+```
+
+## Next Steps
+
+Learn about [Debugger Integration](/docs/advanced/debugger-integration) to extend VS debugging capabilities.

@@ -1,0 +1,336 @@
+---
+title: Tool Windows
+description: Learn how to create dockable tool windows with custom UI in Visual Studio.
+category: fundamentals
+order: 5
+---
+
+import Callout from '@components/Callout.astro';
+
+Tool windows are dockable panels in Visual Studio, like Solution Explorer, Error List, or Output. Your extension can create custom tool windows with any UI content.
+
+## Creating a Tool Window
+
+### With Community Toolkit
+
+Create the tool window class:
+
+```csharp
+using System.Runtime.InteropServices;
+using System.Windows;
+using Community.VisualStudio.Toolkit;
+using Microsoft.VisualStudio.Imaging;
+using Microsoft.VisualStudio.Shell;
+
+[Guid("your-tool-window-guid")]
+public class MyToolWindow : BaseToolWindow<MyToolWindow>
+{
+    public override string GetTitle(int toolWindowId) => "My Tool Window";
+
+    public override Type PaneType => typeof(Pane);
+
+    public override Task<FrameworkElement> CreateAsync(int toolWindowId, CancellationToken cancellationToken)
+    {
+        return Task.FromResult<FrameworkElement>(new MyToolWindowControl());
+    }
+
+    internal class Pane : ToolWindowPane
+    {
+        public Pane()
+        {
+            BitmapImageMoniker = KnownMonikers.ToolWindow;
+        }
+    }
+}
+```
+
+Create the WPF control:
+
+```xml
+<!-- MyToolWindowControl.xaml -->
+<UserControl x:Class="MyExtension.MyToolWindowControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{DynamicResource VsBrush.Window}"
+             Foreground="{DynamicResource VsBrush.WindowText}">
+    <Grid Margin="10">
+        <StackPanel>
+            <TextBlock Text="My Tool Window" FontSize="16" FontWeight="Bold" Margin="0,0,0,10"/>
+            <TextBox x:Name="InputBox" Margin="0,0,0,10"/>
+            <Button Content="Click Me" Click="OnButtonClick"/>
+        </StackPanel>
+    </Grid>
+</UserControl>
+```
+
+```csharp
+// MyToolWindowControl.xaml.cs
+public partial class MyToolWindowControl : UserControl
+{
+    public MyToolWindowControl()
+    {
+        InitializeComponent();
+    }
+
+    private void OnButtonClick(object sender, RoutedEventArgs e)
+    {
+        VS.MessageBox.Show("Hello", $"You entered: {InputBox.Text}");
+    }
+}
+```
+
+### Register in Package
+
+```csharp
+[ProvideToolWindow(typeof(MyToolWindow.Pane), Style = VsDockStyle.Tabbed, Window = "3ae79031-e1bc-11d0-8f78-00a0c9110057")]
+public sealed class MyPackage : ToolkitPackage { }
+```
+
+### Create a Command to Show It
+
+```csharp
+[Command(PackageIds.ShowMyToolWindow)]
+internal sealed class ShowMyToolWindowCommand : BaseCommand<ShowMyToolWindowCommand>
+{
+    protected override async Task ExecuteAsync(OleMenuCmdEventArgs e)
+    {
+        await MyToolWindow.ShowAsync();
+    }
+}
+```
+
+## Traditional Approach
+
+Without the Community Toolkit:
+
+```csharp
+[Guid("your-tool-window-guid")]
+public class MyToolWindow : ToolWindowPane
+{
+    public MyToolWindow() : base(null)
+    {
+        Caption = "My Tool Window";
+        BitmapImageMoniker = KnownMonikers.ToolWindow;
+        Content = new MyToolWindowControl();
+    }
+}
+```
+
+Show the window:
+
+```csharp
+var window = await package.FindToolWindowAsync(
+    typeof(MyToolWindow), 0, true, package.DisposalToken);
+var frame = (IVsWindowFrame)window.Frame;
+frame.Show();
+```
+
+## Tool Window Options
+
+### Docking Style
+
+```csharp
+[ProvideToolWindow(typeof(MyToolWindow.Pane),
+    Style = VsDockStyle.Tabbed,           // Docking behavior
+    Window = EnvDTE.Constants.vsWindowKindOutput)]  // Dock with Output window
+```
+
+Docking options:
+
+| Style | Description |
+|-------|-------------|
+| `VsDockStyle.Tabbed` | Tab group with another window |
+| `VsDockStyle.Linked` | Linked to another window |
+| `VsDockStyle.MDI` | MDI child window |
+| `VsDockStyle.Float` | Floating window |
+| `VsDockStyle.AlwaysFloat` | Always floating |
+
+### Visibility
+
+Control when the tool window appears:
+
+```csharp
+[ProvideToolWindowVisibility(typeof(MyToolWindow.Pane), VSConstants.UICONTEXT.SolutionExists_string)]
+```
+
+### Multiple Instances
+
+Allow multiple instances of your tool window:
+
+```csharp
+[ProvideToolWindow(typeof(MyToolWindow.Pane), MultiInstances = true)]
+```
+
+Show a specific instance:
+
+```csharp
+await MyToolWindow.ShowAsync(toolWindowId: 1);
+await MyToolWindow.ShowAsync(toolWindowId: 2);
+```
+
+## VS Theme Integration
+
+Use VS theme brushes for proper appearance:
+
+```xml
+<UserControl
+    Background="{DynamicResource VsBrush.Window}"
+    Foreground="{DynamicResource VsBrush.WindowText}">
+
+    <Button
+        Background="{DynamicResource VsBrush.Button}"
+        Foreground="{DynamicResource VsBrush.ButtonText}"/>
+
+    <TextBox
+        Background="{DynamicResource VsBrush.ComboBoxBackground}"
+        Foreground="{DynamicResource VsBrush.WindowText}"/>
+</UserControl>
+```
+
+<Callout type="tip">
+Always use dynamic resource brushes so your UI updates when users change VS themes.
+</Callout>
+
+## Search Support
+
+Add a search box to your tool window:
+
+```csharp
+public class MyToolWindow : ToolWindowPane, IVsWindowSearch
+{
+    public MyToolWindow() : base(null)
+    {
+        Caption = "My Tool Window";
+        Content = new MyToolWindowControl();
+    }
+
+    public IVsSearchTask CreateSearch(uint dwCookie, IVsSearchQuery pSearchQuery, IVsSearchCallback pSearchCallback)
+    {
+        return new MySearchTask(dwCookie, pSearchQuery, pSearchCallback, this);
+    }
+
+    public void ClearSearch()
+    {
+        // Clear search results
+    }
+
+    public void ProvideSearchSettings(IVsUIDataSource pSearchSettings)
+    {
+        // Configure search options
+    }
+
+    public bool OnNavigationKeyDown(uint dwNavigationKey, uint dwModifiers)
+    {
+        return false;
+    }
+
+    public bool SearchEnabled => true;
+    public Guid Category => Guid.Empty;
+    public IVsEnumWindowSearchFilters SearchFiltersEnum => null;
+    public IVsEnumWindowSearchOptions SearchOptionsEnum => null;
+}
+```
+
+## Toolbar in Tool Window
+
+Add a toolbar to your tool window:
+
+```csharp
+public class MyToolWindow : ToolWindowPane
+{
+    public MyToolWindow() : base(null)
+    {
+        Caption = "My Tool Window";
+        Content = new MyToolWindowControl();
+
+        // Set the toolbar
+        ToolBar = new CommandID(PackageGuids.guidMyPackageCmdSet, PackageIds.MyToolWindowToolbar);
+    }
+}
+```
+
+Define the toolbar in VSCT:
+
+```xml
+<Menus>
+  <Menu guid="guidMyPackageCmdSet" id="MyToolWindowToolbar" type="ToolWindowToolbar">
+    <Strings>
+      <ButtonText>Tool Window Toolbar</ButtonText>
+    </Strings>
+  </Menu>
+</Menus>
+
+<Groups>
+  <Group guid="guidMyPackageCmdSet" id="MyToolWindowToolbarGroup">
+    <Parent guid="guidMyPackageCmdSet" id="MyToolWindowToolbar"/>
+  </Group>
+</Groups>
+```
+
+## InfoBar in Tool Window
+
+Show informational banners:
+
+```csharp
+public async Task ShowInfoBarAsync()
+{
+    var model = new InfoBarModel(new[]
+    {
+        new InfoBarTextSpan("This is an info bar. "),
+        new InfoBarHyperlink("Click here", "action1")
+    }, KnownMonikers.StatusInformation);
+
+    var infoBar = await VS.InfoBar.CreateAsync(MyToolWindow, model);
+    infoBar.ActionItemClicked += (s, e) =>
+    {
+        if (e.ActionItem.ActionContext == "action1")
+        {
+            // Handle click
+        }
+    };
+
+    await infoBar.TryShowInfoBarUIAsync();
+}
+```
+
+## Complete Example
+
+```csharp
+// MyToolWindow.cs
+[Guid("12345678-1234-1234-1234-123456789012")]
+public class MyToolWindow : BaseToolWindow<MyToolWindow>
+{
+    public override string GetTitle(int toolWindowId) => "Solution Explorer+";
+
+    public override Type PaneType => typeof(Pane);
+
+    public override async Task<FrameworkElement> CreateAsync(int toolWindowId, CancellationToken ct)
+    {
+        var solution = await VS.Solutions.GetCurrentSolutionAsync();
+        return new SolutionExplorerControl(solution);
+    }
+
+    internal class Pane : ToolWindowPane
+    {
+        public Pane()
+        {
+            BitmapImageMoniker = KnownMonikers.Solution;
+            ToolBar = new CommandID(PackageGuids.guidMyPackageCmdSet, PackageIds.SolutionToolbar);
+        }
+    }
+}
+
+// SolutionExplorerControl.xaml.cs
+public partial class SolutionExplorerControl : UserControl
+{
+    public SolutionExplorerControl(Solution solution)
+    {
+        InitializeComponent();
+        DataContext = new SolutionViewModel(solution);
+    }
+}
+```
+
+## Next Steps
+
+Learn about extending the [Code Editor](/docs/fundamentals/editors) with custom features.

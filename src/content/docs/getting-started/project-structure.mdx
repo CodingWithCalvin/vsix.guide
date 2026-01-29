@@ -1,0 +1,197 @@
+---
+title: Project Structure
+description: Understand the anatomy of a Visual Studio extension project.
+category: getting-started
+order: 4
+---
+
+import Callout from '@components/Callout.astro';
+
+A VSIX project contains several files that work together to define your extension. Let's examine each one.
+
+## Project Files
+
+### .csproj File
+
+The project file configures your extension build:
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <GeneratePkgDefFile>true</GeneratePkgDefFile>
+    <UseCodebase>true</UseCodebase>
+    <IncludeAssemblyInVSIXContainer>true</IncludeAssemblyInVSIXContainer>
+    <IncludeDebugSymbolsInVSIXContainer>false</IncludeDebugSymbolsInVSIXContainer>
+    <IncludeDebugSymbolsInLocalVSIXDeployment>false</IncludeDebugSymbolsInLocalVSIXDeployment>
+    <CopyBuildOutputToOutputDirectory>true</CopyBuildOutputToOutputDirectory>
+    <CopyOutputSymbolsToOutputDirectory>false</CopyOutputSymbolsToOutputDirectory>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Community.VisualStudio.Toolkit.17" Version="17.0.*" />
+    <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.0.*">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>
+```
+
+Key properties:
+- **TargetFramework** - VS extensions use .NET Framework 4.8
+- **GeneratePkgDefFile** - Creates registry entries for your package
+- **UseCodebase** - Loads assemblies from the VSIX location
+
+### source.extension.vsixmanifest
+
+The VSIX manifest describes your extension:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<PackageManifest Version="2.0.0"
+                 xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">
+  <Metadata>
+    <Identity Id="HelloWorldExtension.guid"
+              Version="1.0"
+              Language="en-US"
+              Publisher="Your Name" />
+    <DisplayName>Hello World Extension</DisplayName>
+    <Description>A simple Hello World extension for Visual Studio.</Description>
+    <Tags>hello, world, sample</Tags>
+  </Metadata>
+  <Installation>
+    <InstallationTarget Id="Microsoft.VisualStudio.Community"
+                        Version="[17.0, 18.0)">
+      <ProductArchitecture>amd64</ProductArchitecture>
+    </InstallationTarget>
+  </Installation>
+  <Dependencies>
+    <Dependency Id="Microsoft.Framework.NDP"
+                DisplayName="Microsoft .NET Framework"
+                Version="[4.8,)" />
+  </Dependencies>
+  <Prerequisites>
+    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor"
+                  Version="[17.0,18.0)"
+                  DisplayName="Visual Studio core editor" />
+  </Prerequisites>
+  <Assets>
+    <Asset Type="Microsoft.VisualStudio.VsPackage"
+           Path="|%CurrentProject%;PkgdefProjectOutputGroup|" />
+    <Asset Type="Microsoft.VisualStudio.MefComponent"
+           Path="|%CurrentProject%|" />
+  </Assets>
+</PackageManifest>
+```
+
+Important sections:
+- **Metadata** - Extension name, description, and tags for Marketplace
+- **Installation** - Which VS versions and editions are supported
+- **Prerequisites** - Required VS components
+- **Assets** - Files included in the VSIX
+
+<Callout type="note">
+The version range `[17.0, 18.0)` means VS 2022 (any version from 17.0 up to but not including 18.0).
+</Callout>
+
+## Command Files
+
+### VSCommandTable.vsct
+
+The Visual Studio Command Table defines menus, groups, and commands:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<CommandTable xmlns="http://schemas.microsoft.com/VisualStudio/2005-10-18/CommandTable">
+  <Extern href="stdidcmd.h"/>
+  <Extern href="vsshlids.h"/>
+  <Include href="KnownImageIds.vsct"/>
+
+  <Commands package="guidMyPackage">
+    <Groups>
+      <!-- Command group definitions -->
+    </Groups>
+    <Buttons>
+      <!-- Command button definitions -->
+    </Buttons>
+    <Bitmaps>
+      <!-- Image definitions -->
+    </Bitmaps>
+  </Commands>
+
+  <Symbols>
+    <!-- GUID and ID definitions -->
+  </Symbols>
+</CommandTable>
+```
+
+This file is compiled into a `.ctmenu` file during build.
+
+### VSCommandTable.cs
+
+Auto-generated constants from your `.vsct` file:
+
+```csharp
+namespace HelloWorldExtension
+{
+    internal sealed partial class PackageGuids
+    {
+        public const string guidHelloWorldExtensionPackageString = "...";
+        public static Guid guidHelloWorldExtensionPackage = new Guid(guidHelloWorldExtensionPackageString);
+    }
+
+    internal sealed partial class PackageIds
+    {
+        public const int MyCommand = 0x0100;
+        public const int MyMenuGroup = 0x1020;
+    }
+}
+```
+
+<Callout type="tip">
+Don't edit this file manually - it's regenerated on every build from the `.vsct` file.
+</Callout>
+
+## Package File
+
+### YourPackage.cs
+
+The package class is your extension's entry point:
+
+```csharp
+[PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
+[Guid(PackageGuids.HelloWorldExtensionString)]
+[ProvideMenuResource("Menus.ctmenu", 1)]
+[ProvideAutoLoad(UIContextGuids80.SolutionExists, PackageAutoLoadFlags.BackgroundLoad)]
+public sealed class HelloWorldExtensionPackage : ToolkitPackage
+{
+    protected override async Task InitializeAsync(
+        CancellationToken cancellationToken,
+        IProgress<ServiceProgressData> progress)
+    {
+        await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+        await this.RegisterCommandsAsync();
+    }
+}
+```
+
+Common attributes:
+- **PackageRegistration** - Registers the package
+- **ProvideMenuResource** - Links to command table
+- **ProvideAutoLoad** - Auto-loads the package in specific contexts
+
+## Output Files
+
+When you build, these files are generated:
+
+| File | Description |
+|------|-------------|
+| `bin/Debug/YourExtension.vsix` | The deployable extension package |
+| `bin/Debug/YourExtension.dll` | Your compiled code |
+| `bin/Debug/YourExtension.pkgdef` | Registry configuration |
+| `bin/Debug/extension.vsixmanifest` | Processed manifest |
+
+## Next Steps
+
+Learn how to [Debug Your Extension](/docs/getting-started/debugging) using the Experimental Instance.

@@ -1,0 +1,319 @@
+---
+title: Debugger Integration
+description: Learn how to integrate with the Visual Studio debugger including custom visualizers and debug engines.
+category: advanced
+order: 4
+---
+
+import Callout from '@components/Callout.astro';
+
+Visual Studio's debugger is highly extensible. You can create custom debug visualizers, expression evaluators, and even complete debug engines for new languages or runtimes.
+
+## Debugger Extension Points
+
+| Extension | Description |
+|-----------|-------------|
+| Debug Visualizers | Custom UI for viewing variable data |
+| Expression Evaluators | Evaluate expressions in watch windows |
+| Debug Engines | Support debugging new languages/runtimes |
+| Exception Assistants | Custom exception handling UI |
+
+## Debug Visualizers
+
+Visualizers provide custom views for complex data types in the debugger.
+
+### Creating a Visualizer
+
+```csharp
+using Microsoft.VisualStudio.DebuggerVisualizers;
+using System.Windows.Forms;
+
+// Attribute tells VS which types this visualizer handles
+[assembly: DebuggerVisualizer(
+    typeof(MyVisualizer),
+    typeof(VisualizerObjectSource),
+    Target = typeof(MyComplexType),
+    Description = "My Custom Visualizer")]
+
+public class MyVisualizer : DialogDebuggerVisualizer
+{
+    protected override void Show(
+        IDialogVisualizerService windowService,
+        IVisualizerObjectProvider objectProvider)
+    {
+        // Get the object being visualized
+        var data = (MyComplexType)objectProvider.GetObject();
+
+        // Show custom UI
+        using (var form = new VisualizerForm(data))
+        {
+            windowService.ShowDialog(form);
+        }
+    }
+}
+```
+
+### Visualizer Form
+
+```csharp
+public class VisualizerForm : Form
+{
+    public VisualizerForm(MyComplexType data)
+    {
+        Text = "My Visualizer";
+        Width = 600;
+        Height = 400;
+
+        var grid = new DataGridView
+        {
+            Dock = DockStyle.Fill,
+            DataSource = data.Items
+        };
+        Controls.Add(grid);
+    }
+}
+```
+
+### Object Source for Complex Serialization
+
+```csharp
+public class MyVisualizerObjectSource : VisualizerObjectSource
+{
+    public override void GetData(object target, Stream outgoingData)
+    {
+        var data = (MyComplexType)target;
+
+        // Serialize to stream
+        var formatter = new BinaryFormatter();
+        formatter.Serialize(outgoingData, new VisualizerData
+        {
+            Name = data.Name,
+            Items = data.Items.ToList()
+        });
+    }
+}
+```
+
+<Callout type="note">
+Visualizers run in a separate AppDomain. The target type must be serializable or you need a custom object source.
+</Callout>
+
+## Accessing Debugger State
+
+### IVsDebugger
+
+```csharp
+var debugger = await VS.Services.GetDebuggerAsync();
+
+// Get current debug mode
+debugger.GetMode(out DBGMODE[] mode);
+
+if (mode[0] == DBGMODE.DBGMODE_Break)
+{
+    // Debugger is paused at a breakpoint
+}
+```
+
+### DTE Debugger
+
+```csharp
+var dte = await VS.GetServiceAsync<DTE, DTE2>();
+var debugger = dte.Debugger;
+
+// Get current execution point
+var currentThread = debugger.CurrentThread;
+var currentStackFrame = debugger.CurrentStackFrame;
+var currentFunction = currentStackFrame.FunctionName;
+
+// Evaluate an expression
+var expression = debugger.GetExpression("myVariable");
+if (expression.IsValidValue)
+{
+    var value = expression.Value;
+}
+```
+
+## Debug Events
+
+### Subscribing to Debug Events
+
+```csharp
+VS.Events.DebuggerEvents.EnterBreakMode += OnEnterBreakMode;
+VS.Events.DebuggerEvents.EnterDesignMode += OnEnterDesignMode;
+VS.Events.DebuggerEvents.EnterRunMode += OnEnterRunMode;
+
+private void OnEnterBreakMode(dbgEventReason reason, ref dbgExecutionAction action)
+{
+    // Debugger hit a breakpoint or exception
+    if (reason == dbgEventReason.dbgEventReasonBreakpoint)
+    {
+        // Handle breakpoint hit
+    }
+    else if (reason == dbgEventReason.dbgEventReasonExceptionThrown)
+    {
+        // Handle exception
+    }
+
+    action = dbgExecutionAction.dbgExecutionActionDefault;
+}
+```
+
+### Using IVsDebuggerEvents
+
+```csharp
+public sealed class MyPackage : AsyncPackage, IVsDebuggerEvents
+{
+    private uint _debugEventsCookie;
+
+    protected override async Task InitializeAsync(...)
+    {
+        var debugger = await GetServiceAsync(typeof(SVsShellDebugger)) as IVsDebugger;
+        debugger.AdviseDebuggerEvents(this, out _debugEventsCookie);
+    }
+
+    public int OnModeChange(DBGMODE dbgmodeNew)
+    {
+        switch (dbgmodeNew)
+        {
+            case DBGMODE.DBGMODE_Design:
+                // Not debugging
+                break;
+            case DBGMODE.DBGMODE_Run:
+                // Running
+                break;
+            case DBGMODE.DBGMODE_Break:
+                // At breakpoint
+                break;
+        }
+        return VSConstants.S_OK;
+    }
+}
+```
+
+## Custom Breakpoints
+
+### Conditional Breakpoints
+
+```csharp
+var dte = await VS.GetServiceAsync<DTE, DTE2>();
+var debugger = dte.Debugger;
+
+// Set a breakpoint with condition
+var breakpoints = debugger.Breakpoints;
+var bp = breakpoints.Add(
+    File: @"C:\MyProject\Program.cs",
+    Line: 42);
+
+// Make it conditional
+bp.Condition = "i > 100";
+bp.ConditionType = dbgBreakpointConditionType.dbgBreakpointConditionTypeWhenTrue;
+
+// Set hit count
+bp.HitCountType = dbgHitCountType.dbgHitCountTypeGreaterOrEqual;
+bp.HitCountTarget = 5;
+```
+
+### Tracepoints
+
+```csharp
+var bp = debugger.Breakpoints.Add(File: path, Line: line);
+
+// Convert to tracepoint (doesn't break, just logs)
+bp.Tag = "TraceMessage: {variable}";
+// Note: Actual tracepoint implementation varies by VS version
+```
+
+## Debug Engines
+
+Creating a complete debug engine is complex but allows debugging custom languages.
+
+### Debug Engine Overview
+
+A debug engine implements:
+
+| Interface | Purpose |
+|-----------|---------|
+| `IDebugEngine2` | Core engine interface |
+| `IDebugProgram2` | Represents the running program |
+| `IDebugThread2` | Represents a thread |
+| `IDebugStackFrame2` | Represents a stack frame |
+| `IDebugExpression2` | Expression evaluation |
+
+### Registering a Debug Engine
+
+```csharp
+[ProvideDebugEngine(
+    typeof(MyDebugEngine),
+    "MyLanguage Debug Engine",
+    "my-debug-engine-guid")]
+[ProvideDebugLanguage(
+    "MyLanguage",
+    "my-language-guid",
+    "my-debug-engine-guid",
+    "my-expression-evaluator-guid")]
+public sealed class MyPackage : AsyncPackage { }
+```
+
+<Callout type="warning">
+Debug engines are complex to implement. Consider using an existing engine (like the .NET CLR engine) if your language compiles to a supported runtime.
+</Callout>
+
+## Exception Settings
+
+### Custom Exception Types
+
+```csharp
+// Register custom exception categories
+[ProvideDebugException(
+    ExceptionKind = "MyLanguageExceptions",
+    ExceptionCode = 0,
+    ExceptionName = "MyLanguage Exceptions")]
+[ProvideDebugException(
+    ExceptionKind = "MyLanguageExceptions",
+    ExceptionCode = 1,
+    ExceptionName = "MyCustomException",
+    ParentExceptionKind = "MyLanguageExceptions")]
+public sealed class MyPackage : AsyncPackage { }
+```
+
+## Memory and Registers
+
+### Reading Memory
+
+```csharp
+var debugger = await VS.Services.GetDebuggerAsync() as IVsDebugger3;
+debugger.GetCurrentStackFrame(out IDebugStackFrame2 stackFrame);
+
+// Get memory context
+stackFrame.GetMemoryContext(out IDebugMemoryContext2 memContext);
+
+// Read memory
+memContext.GetInfo(enum_CONTEXT_INFO_FIELDS.CIF_ADDRESS, out CONTEXT_INFO info);
+```
+
+## Common Debugger Commands
+
+Execute debugger commands programmatically:
+
+```csharp
+var dte = await VS.GetServiceAsync<DTE, DTE2>();
+
+// Step operations
+dte.Debugger.StepInto();
+dte.Debugger.StepOver();
+dte.Debugger.StepOut();
+
+// Continue/Break
+dte.Debugger.Go();
+dte.Debugger.Break();
+
+// Stop debugging
+dte.Debugger.Stop();
+
+// Restart
+dte.ExecuteCommand("Debug.Restart");
+```
+
+## Next Steps
+
+Learn about [Source Control](/docs/advanced/source-control) integration for version control providers.

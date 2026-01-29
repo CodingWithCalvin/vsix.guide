@@ -1,0 +1,298 @@
+---
+title: Source Control Integration
+description: Learn how to integrate with Visual Studio's source control system.
+category: advanced
+order: 5
+---
+
+import Callout from '@components/Callout.astro';
+
+Visual Studio supports source control integration through two mechanisms: the legacy MSSCCI (Microsoft Source Code Control Interface) and the modern Git-based APIs.
+
+## Source Control Approaches
+
+| Approach | Use Case |
+|----------|----------|
+| Git API | Extend Git functionality in VS |
+| MSSCCI Provider | Implement custom VCS support |
+| Team Explorer | Add custom pages to Team Explorer |
+
+## Working with Git
+
+### Accessing Git Services
+
+```csharp
+var gitService = await VS.GetServiceAsync<IGitService, IGitService>();
+
+// Get repository info
+var repoInfo = gitService.GetRepository(solutionPath);
+if (repoInfo != null)
+{
+    var currentBranch = repoInfo.CurrentBranch;
+    var remotes = repoInfo.Remotes;
+}
+```
+
+### Git Events
+
+```csharp
+VS.Events.GitEvents.BranchChanged += OnBranchChanged;
+VS.Events.GitEvents.RepositoryChanged += OnRepositoryChanged;
+
+private void OnBranchChanged(object sender, BranchChangedEventArgs e)
+{
+    var newBranch = e.BranchName;
+    // React to branch change
+}
+```
+
+## Source Control Provider (MSSCCI)
+
+### Provider Registration
+
+```csharp
+[ProvideSourceControlProvider(
+    "My Source Control",
+    "my-scc-provider-guid")]
+[ProvideService(typeof(SccProvider), ServiceName = "My SCC")]
+public sealed class SccPackage : AsyncPackage
+{
+    protected override async Task InitializeAsync(...)
+    {
+        AddService(typeof(SccProvider),
+            (_, _, _) => Task.FromResult<object>(new SccProvider()),
+            true);
+    }
+}
+```
+
+### Implementing IVsSccProvider
+
+```csharp
+[Guid("my-scc-provider-guid")]
+public class SccProvider : IVsSccProvider, IVsSccManager2
+{
+    public int SetActive()
+    {
+        // Provider is being activated
+        return VSConstants.S_OK;
+    }
+
+    public int SetInactive()
+    {
+        // Provider is being deactivated
+        return VSConstants.S_OK;
+    }
+
+    public int AnyItemsUnderSourceControl(out int pfResult)
+    {
+        pfResult = 1; // Items are under source control
+        return VSConstants.S_OK;
+    }
+
+    // IVsSccManager2 implementation
+    public int RegisterSccProject(
+        IVsSccProject2 pscp2Project,
+        string pszSccProjectName,
+        string pszSccAuxPath,
+        string pszSccLocalPath,
+        string pszProvider)
+    {
+        // Register project with source control
+        return VSConstants.S_OK;
+    }
+
+    public int UnregisterSccProject(IVsSccProject2 pscp2Project)
+    {
+        return VSConstants.S_OK;
+    }
+
+    public int GetSccGlyph(
+        int cFiles,
+        string[] rgpszFullPaths,
+        VsStateIcon[] rgsiGlyphs,
+        uint[] rgdwSccStatus)
+    {
+        // Return status icons for files
+        for (int i = 0; i < cFiles; i++)
+        {
+            rgsiGlyphs[i] = GetFileStatus(rgpszFullPaths[i]);
+        }
+        return VSConstants.S_OK;
+    }
+}
+```
+
+### Source Control Glyphs
+
+```csharp
+private VsStateIcon GetFileStatus(string filePath)
+{
+    var status = GetStatusFromVCS(filePath);
+
+    return status switch
+    {
+        FileStatus.Unchanged => VsStateIcon.STATEICON_CHECKEDIN,
+        FileStatus.Modified => VsStateIcon.STATEICON_CHECKEDOUT,
+        FileStatus.Added => VsStateIcon.STATEICON_CHECKEDOUT,
+        FileStatus.Deleted => VsStateIcon.STATEICON_EXCLUDEDFROMSCC,
+        FileStatus.Conflicted => VsStateIcon.STATEICON_CONFLICT,
+        _ => VsStateIcon.STATEICON_BLANK
+    };
+}
+```
+
+## Team Explorer Integration
+
+### Custom Team Explorer Page
+
+```csharp
+[TeamExplorerPage("my-page-guid", Title = "My Page", PagePriority = 100)]
+public class MyTeamExplorerPage : TeamExplorerPageBase
+{
+    public override void Initialize(object sender, PageInitializeEventArgs e)
+    {
+        base.Initialize(sender, e);
+        Title = "My Custom Page";
+        View = new MyPageView();
+    }
+
+    public override void Refresh()
+    {
+        base.Refresh();
+        // Refresh page content
+    }
+}
+```
+
+### Team Explorer Section
+
+```csharp
+[TeamExplorerSection("my-section-guid",
+    TeamExplorerPageIds.Home,
+    Priority = 100)]
+public class MyTeamExplorerSection : TeamExplorerSectionBase
+{
+    public override void Initialize(object sender, SectionInitializeEventArgs e)
+    {
+        base.Initialize(sender, e);
+        Title = "My Section";
+        View = new MySectionView();
+    }
+}
+```
+
+## File Status Tracking
+
+### Tracking Document Changes
+
+```csharp
+public class DocumentTracker : IVsTrackProjectDocumentsEvents2
+{
+    public int OnQueryAddFiles(...)
+    {
+        // Files about to be added
+        return VSConstants.S_OK;
+    }
+
+    public int OnAfterAddFilesEx(...)
+    {
+        // Files were added
+        return VSConstants.S_OK;
+    }
+
+    public int OnQueryRemoveFiles(...)
+    {
+        return VSConstants.S_OK;
+    }
+
+    public int OnAfterRemoveFiles(...)
+    {
+        return VSConstants.S_OK;
+    }
+
+    public int OnQueryRenameFiles(...)
+    {
+        return VSConstants.S_OK;
+    }
+
+    public int OnAfterRenameFiles(...)
+    {
+        return VSConstants.S_OK;
+    }
+}
+
+// Register the tracker
+var trackDocs = await VS.Services.GetTrackProjectDocumentsAsync();
+trackDocs.AdviseTrackProjectDocumentsEvents(new DocumentTracker(), out uint cookie);
+```
+
+## Pending Changes
+
+### Showing Pending Changes
+
+```csharp
+public async Task ShowPendingChangesAsync()
+{
+    var shell = await VS.Services.GetUIShellAsync();
+    var clsidPendingChanges = new Guid("{...}"); // Pending Changes tool window GUID
+
+    shell.FindToolWindow(
+        (uint)__VSFINDTOOLWIN.FTW_fForceCreate,
+        ref clsidPendingChanges,
+        out IVsWindowFrame frame);
+
+    frame?.Show();
+}
+```
+
+## Custom Source Control Commands
+
+### Add to Context Menus
+
+```xml
+<!-- In .vsct file -->
+<Group guid="guidSccCmdSet" id="SccMenuGroup" priority="0x0100">
+  <Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_ITEMNODE"/>
+</Group>
+
+<Button guid="guidSccCmdSet" id="cmdCheckout" priority="0x0100" type="Button">
+  <Parent guid="guidSccCmdSet" id="SccMenuGroup"/>
+  <Icon guid="guidImages" id="checkoutIcon"/>
+  <Strings>
+    <ButtonText>Check Out</ButtonText>
+  </Strings>
+</Button>
+```
+
+### Command Implementation
+
+```csharp
+[Command(PackageIds.CheckoutCommand)]
+internal sealed class CheckoutCommand : BaseCommand<CheckoutCommand>
+{
+    protected override async Task ExecuteAsync(OleMenuCmdEventArgs e)
+    {
+        var selectedItems = await VS.Solutions.GetActiveItemsAsync();
+
+        foreach (var item in selectedItems)
+        {
+            await CheckoutFileAsync(item.FullPath);
+        }
+    }
+
+    protected override void BeforeQueryStatus(EventArgs e)
+    {
+        // Only show for files under source control
+        Command.Visible = IsUnderSourceControl();
+    }
+}
+```
+
+<Callout type="note">
+Modern Git integration in VS is sophisticated. Consider extending existing Git functionality rather than implementing a complete SCC provider.
+</Callout>
+
+## Next Steps
+
+Learn about [Custom Project Types](/docs/advanced/project-types) to create new project systems.

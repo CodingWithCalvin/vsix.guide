@@ -1,0 +1,231 @@
+---
+title: VSIX Manifest Reference
+description: Complete reference for VSIX manifest schema and extension packaging.
+category: reference
+order: 4
+---
+
+VSIX packages use XML manifests to describe extension metadata, installation requirements, and assets.
+
+## Manifest Versions
+
+| Version | Schema Namespace | VS Version |
+|---------|------------------|------------|
+| VSIX v1 | `http://schemas.microsoft.com/developer/vsx-schema/2010` | VS 2010-2013 |
+| VSIX v3 | `http://schemas.microsoft.com/developer/vsx-schema/2011` | VS 2015+ |
+
+## Basic Structure
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<PackageManifest Version="2.0.0"
+    xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011"
+    xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
+  <Metadata>...</Metadata>
+  <Installation>...</Installation>
+  <Dependencies>...</Dependencies>
+  <Prerequisites>...</Prerequisites>
+  <Assets>...</Assets>
+</PackageManifest>
+```
+
+## Metadata Element
+
+```xml
+<Metadata>
+  <Identity Id="MyExtension.GUID"
+            Version="1.0.0"
+            Language="en-US"
+            Publisher="My Company" />
+  <DisplayName>My Extension</DisplayName>
+  <Description xml:space="preserve">Description of my extension.</Description>
+  <MoreInfo>https://example.com</MoreInfo>
+  <License>license.txt</License>
+  <GettingStartedGuide>https://example.com/docs</GettingStartedGuide>
+  <ReleaseNotes>release-notes.txt</ReleaseNotes>
+  <Icon>icon.png</Icon>
+  <PreviewImage>preview.png</PreviewImage>
+  <Tags>tag1, tag2, tag3</Tags>
+</Metadata>
+```
+
+### Identity Attributes
+
+| Attribute | Required | Description |
+|-----------|----------|-------------|
+| `Id` | Yes | Unique extension identifier |
+| `Version` | Yes | Semantic version (Major.Minor.Patch) |
+| `Language` | No | Culture code (e.g., "en-US") |
+| `Publisher` | Yes | Publisher display name |
+
+## Installation Element
+
+```xml
+<Installation InstalledByMsi="false" AllUsers="false">
+  <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.0,18.0)">
+    <ProductArchitecture>amd64</ProductArchitecture>
+  </InstallationTarget>
+  <InstallationTarget Id="Microsoft.VisualStudio.Pro" Version="[17.0,18.0)" />
+  <InstallationTarget Id="Microsoft.VisualStudio.Enterprise" Version="[17.0,18.0)" />
+</Installation>
+```
+
+### Installation Target IDs
+
+| Target | Description |
+|--------|-------------|
+| `Microsoft.VisualStudio.Community` | VS Community edition |
+| `Microsoft.VisualStudio.Pro` | VS Professional |
+| `Microsoft.VisualStudio.Enterprise` | VS Enterprise |
+| `Microsoft.VisualStudio.IntegratedShell` | Integrated shell |
+
+### Workload Targets
+
+| Workload | Description |
+|----------|-------------|
+| `Microsoft.VisualStudio.Workload.ManagedDesktop` | .NET desktop |
+| `Microsoft.VisualStudio.Workload.Web` | ASP.NET and web |
+| `Microsoft.VisualStudio.Workload.NetCoreTools` | .NET Core |
+| `Microsoft.VisualStudio.Workload.Azure` | Azure development |
+| `Microsoft.VisualStudio.Workload.NativeDesktop` | C++ desktop |
+| `Microsoft.VisualStudio.Workload.Universal` | UWP |
+
+### Version Range Syntax
+
+| Syntax | Meaning |
+|--------|---------|
+| `[17.0,)` | 17.0 or higher |
+| `[17.0,18.0)` | 17.0 up to (not including) 18.0 |
+| `[17.0,17.4]` | 17.0 through 17.4 inclusive |
+| `17.0` | Exactly 17.0 |
+
+### Product Architecture
+
+```xml
+<ProductArchitecture>amd64</ProductArchitecture>
+```
+
+Valid values: `x86`, `amd64`, `arm64`
+
+## Dependencies Element
+
+```xml
+<Dependencies>
+  <Dependency Id="Microsoft.Framework.NDP"
+              DisplayName=".NET Framework"
+              d:Source="Manual"
+              Version="[4.8,)" />
+</Dependencies>
+```
+
+## Prerequisites Element
+
+```xml
+<Prerequisites>
+  <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor"
+                Version="[17.0,)"
+                DisplayName="Visual Studio core editor" />
+  <Prerequisite Id="Microsoft.VisualStudio.Component.Roslyn.Compiler"
+                Version="[17.0,)"
+                DisplayName="C# and VB Roslyn compilers" />
+</Prerequisites>
+```
+
+## Assets Element
+
+```xml
+<Assets>
+  <Asset Type="Microsoft.VisualStudio.VsPackage"
+         d:Source="Project"
+         d:ProjectName="%CurrentProject%"
+         Path="|%CurrentProject%;PkgdefProjectOutputGroup|" />
+  <Asset Type="Microsoft.VisualStudio.MefComponent"
+         d:Source="Project"
+         d:ProjectName="%CurrentProject%"
+         Path="|%CurrentProject%|" />
+</Assets>
+```
+
+### Standard Asset Types
+
+| Type | Description |
+|------|-------------|
+| `Microsoft.VisualStudio.VsPackage` | VS Package assembly |
+| `Microsoft.VisualStudio.MefComponent` | MEF component |
+| `Microsoft.VisualStudio.Assembly` | Referenced assembly |
+| `Microsoft.VisualStudio.ToolboxControl` | Toolbox control |
+| `Microsoft.VisualStudio.ProjectTemplate` | Project template |
+| `Microsoft.VisualStudio.ItemTemplate` | Item template |
+| `Microsoft.VisualStudio.Analyzer` | Roslyn analyzer |
+| `Microsoft.VisualStudio.Content` | Generic content |
+
+## Complete Example
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<PackageManifest Version="2.0.0"
+    xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011"
+    xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
+
+  <Metadata>
+    <Identity Id="MyCompany.MyExtension"
+              Version="1.2.3"
+              Language="en-US"
+              Publisher="My Company" />
+    <DisplayName>My Awesome Extension</DisplayName>
+    <Description xml:space="preserve">A description of what this extension does.</Description>
+    <MoreInfo>https://github.com/mycompany/myextension</MoreInfo>
+    <License>LICENSE.txt</License>
+    <Icon>Resources\icon.png</Icon>
+    <PreviewImage>Resources\preview.png</PreviewImage>
+    <Tags>productivity, coding, tools</Tags>
+  </Metadata>
+
+  <Installation InstalledByMsi="false" AllUsers="false">
+    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.0,)" />
+    <InstallationTarget Id="Microsoft.VisualStudio.Pro" Version="[17.0,)" />
+    <InstallationTarget Id="Microsoft.VisualStudio.Enterprise" Version="[17.0,)" />
+  </Installation>
+
+  <Dependencies>
+    <Dependency Id="Microsoft.Framework.NDP"
+                DisplayName=".NET Framework"
+                d:Source="Manual"
+                Version="[4.8,)" />
+  </Dependencies>
+
+  <Prerequisites>
+    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor"
+                  Version="[17.0,)"
+                  DisplayName="Visual Studio core editor" />
+  </Prerequisites>
+
+  <Assets>
+    <Asset Type="Microsoft.VisualStudio.VsPackage"
+           d:Source="Project"
+           d:ProjectName="%CurrentProject%"
+           Path="|%CurrentProject%;PkgdefProjectOutputGroup|" />
+    <Asset Type="Microsoft.VisualStudio.MefComponent"
+           d:Source="Project"
+           d:ProjectName="%CurrentProject%"
+           Path="|%CurrentProject%|" />
+  </Assets>
+</PackageManifest>
+```
+
+## Language Pack Manifest
+
+For localized extensions:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<PackageLanguagePackManifest Version="2.0.0"
+    xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">
+  <Metadata>
+    <DisplayName>Mon Extension</DisplayName>
+    <Description>Description en francais</Description>
+    <License>license-fr.txt</License>
+    <MoreInfo>https://example.com/fr</MoreInfo>
+  </Metadata>
+</PackageLanguagePackManifest>
+```

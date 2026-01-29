@@ -1,0 +1,399 @@
+---
+title: Editor Extensions
+description: Learn how to extend the Visual Studio code editor with custom features.
+category: fundamentals
+order: 6
+---
+
+import Callout from '@components/Callout.astro';
+
+The Visual Studio editor can be extended with custom features like text decorations, margins, IntelliSense, and more. Editor extensions use MEF (Managed Extensibility Framework) for composition.
+
+## Editor Architecture
+
+The VS editor has several key components:
+
+- **Text Buffer** - The underlying text storage
+- **Text View** - The visual representation of text
+- **Adornments** - Visual decorations on the text
+- **Margins** - Areas around the text view
+- **Classifiers** - Syntax highlighting
+- **Completion** - IntelliSense features
+
+## Getting the Active Editor
+
+### With Community Toolkit
+
+```csharp
+// Get the active document view
+var docView = await VS.Documents.GetActiveDocumentViewAsync();
+if (docView?.TextView == null) return;
+
+// Access the text view
+IWpfTextView textView = docView.TextView;
+
+// Access the text buffer
+ITextBuffer buffer = textView.TextBuffer;
+
+// Get the current text
+string text = buffer.CurrentSnapshot.GetText();
+
+// Get the selection
+var selection = textView.Selection;
+var selectedText = selection.StreamSelectionSpan.GetText();
+```
+
+### Traditional
+
+```csharp
+var textManager = await VS.GetServiceAsync<SVsTextManager, IVsTextManager>();
+textManager.GetActiveView(1, null, out IVsTextView vsTextView);
+
+// Convert to WPF text view
+var componentModel = await VS.GetServiceAsync<SComponentModel, IComponentModel>();
+var editorAdapter = componentModel.GetService<IVsEditorAdaptersFactoryService>();
+IWpfTextView textView = editorAdapter.GetWpfTextView(vsTextView);
+```
+
+## Text Modifications
+
+### Inserting Text
+
+```csharp
+var docView = await VS.Documents.GetActiveDocumentViewAsync();
+var textView = docView?.TextView;
+if (textView == null) return;
+
+var caretPosition = textView.Caret.Position.BufferPosition;
+
+using (var edit = textView.TextBuffer.CreateEdit())
+{
+    edit.Insert(caretPosition, "Hello, World!");
+    edit.Apply();
+}
+```
+
+### Replacing Text
+
+```csharp
+using (var edit = textView.TextBuffer.CreateEdit())
+{
+    // Replace the entire buffer
+    var snapshot = edit.Snapshot;
+    edit.Replace(0, snapshot.Length, newText);
+    edit.Apply();
+}
+```
+
+### Replacing Selection
+
+```csharp
+var selection = textView.Selection;
+if (!selection.IsEmpty)
+{
+    using (var edit = textView.TextBuffer.CreateEdit())
+    {
+        foreach (var span in selection.SelectedSpans)
+        {
+            edit.Replace(span, "replacement text");
+        }
+        edit.Apply();
+    }
+}
+```
+
+## Text Adornments
+
+Adornments are visual elements drawn on the editor surface.
+
+### Text-Relative Adornment
+
+```csharp
+[Export(typeof(IWpfTextViewCreationListener))]
+[ContentType("text")]
+[TextViewRole(PredefinedTextViewRoles.Document)]
+internal sealed class HighlightAdornmentFactory : IWpfTextViewCreationListener
+{
+    [Export(typeof(AdornmentLayerDefinition))]
+    [Name("HighlightAdornment")]
+    [Order(After = PredefinedAdornmentLayers.Selection, Before = PredefinedAdornmentLayers.Text)]
+    private AdornmentLayerDefinition _adornmentLayer;
+
+    public void TextViewCreated(IWpfTextView textView)
+    {
+        new HighlightAdornment(textView);
+    }
+}
+
+internal sealed class HighlightAdornment
+{
+    private readonly IAdornmentLayer _layer;
+    private readonly IWpfTextView _view;
+
+    public HighlightAdornment(IWpfTextView view)
+    {
+        _view = view;
+        _layer = view.GetAdornmentLayer("HighlightAdornment");
+
+        _view.LayoutChanged += OnLayoutChanged;
+    }
+
+    private void OnLayoutChanged(object sender, TextViewLayoutChangedEventArgs e)
+    {
+        foreach (var line in e.NewOrReformattedLines)
+        {
+            CreateHighlight(line);
+        }
+    }
+
+    private void CreateHighlight(ITextViewLine line)
+    {
+        // Create a highlight for lines containing "TODO"
+        var text = line.Extent.GetText();
+        if (!text.Contains("TODO")) return;
+
+        var geometry = _view.TextViewLines.GetMarkerGeometry(line.Extent);
+        if (geometry == null) return;
+
+        var drawing = new GeometryDrawing(
+            new SolidColorBrush(Color.FromArgb(40, 255, 255, 0)),
+            null,
+            geometry);
+        drawing.Freeze();
+
+        var image = new DrawingImage(drawing);
+        image.Freeze();
+
+        var element = new Image { Source = image };
+        Canvas.SetLeft(element, geometry.Bounds.Left);
+        Canvas.SetTop(element, geometry.Bounds.Top);
+
+        _layer.AddAdornment(AdornmentPositioningBehavior.TextRelative,
+            line.Extent, null, element, null);
+    }
+}
+```
+
+## Editor Margins
+
+Create custom margins around the editor:
+
+```csharp
+[Export(typeof(IWpfTextViewMarginProvider))]
+[Name("LineCountMargin")]
+[Order(After = PredefinedMarginNames.LineNumber)]
+[MarginContainer(PredefinedMarginNames.Left)]
+[ContentType("text")]
+[TextViewRole(PredefinedTextViewRoles.Interactive)]
+internal sealed class LineCountMarginProvider : IWpfTextViewMarginProvider
+{
+    public IWpfTextViewMargin CreateMargin(IWpfTextViewHost wpfTextViewHost, IWpfTextViewMargin marginContainer)
+    {
+        return new LineCountMargin(wpfTextViewHost.TextView);
+    }
+}
+
+internal sealed class LineCountMargin : Canvas, IWpfTextViewMargin
+{
+    private readonly IWpfTextView _textView;
+    private bool _isDisposed;
+
+    public LineCountMargin(IWpfTextView textView)
+    {
+        _textView = textView;
+        Width = 50;
+        Background = Brushes.LightGray;
+
+        _textView.LayoutChanged += OnLayoutChanged;
+        UpdateLineCount();
+    }
+
+    private void OnLayoutChanged(object sender, TextViewLayoutChangedEventArgs e)
+    {
+        UpdateLineCount();
+    }
+
+    private void UpdateLineCount()
+    {
+        var lineCount = _textView.TextSnapshot.LineCount;
+        // Update UI with line count
+    }
+
+    public FrameworkElement VisualElement => this;
+    public double MarginSize => Width;
+    public bool Enabled => true;
+
+    public ITextViewMargin GetTextViewMargin(string marginName)
+    {
+        return marginName == "LineCountMargin" ? this : null;
+    }
+
+    public void Dispose()
+    {
+        if (!_isDisposed)
+        {
+            _textView.LayoutChanged -= OnLayoutChanged;
+            _isDisposed = true;
+        }
+    }
+}
+```
+
+## Text Classification (Syntax Highlighting)
+
+Create custom syntax highlighting:
+
+```csharp
+[Export(typeof(IClassifierProvider))]
+[ContentType("text")]
+internal sealed class MyClassifierProvider : IClassifierProvider
+{
+    [Import]
+    internal IClassificationTypeRegistryService ClassificationRegistry { get; set; }
+
+    public IClassifier GetClassifier(ITextBuffer buffer)
+    {
+        return buffer.Properties.GetOrCreateSingletonProperty(
+            () => new MyClassifier(ClassificationRegistry));
+    }
+}
+
+internal sealed class MyClassifier : IClassifier
+{
+    private readonly IClassificationType _keywordType;
+
+    public MyClassifier(IClassificationTypeRegistryService registry)
+    {
+        _keywordType = registry.GetClassificationType("keyword");
+    }
+
+    public event EventHandler<ClassificationChangedEventArgs> ClassificationChanged;
+
+    public IList<ClassificationSpan> GetClassificationSpans(SnapshotSpan span)
+    {
+        var result = new List<ClassificationSpan>();
+        var text = span.GetText();
+
+        // Simple example: highlight "TODO"
+        var index = text.IndexOf("TODO");
+        while (index >= 0)
+        {
+            var todoSpan = new SnapshotSpan(span.Snapshot, span.Start + index, 4);
+            result.Add(new ClassificationSpan(todoSpan, _keywordType));
+            index = text.IndexOf("TODO", index + 1);
+        }
+
+        return result;
+    }
+}
+```
+
+<Callout type="note">
+For syntax highlighting of specific file types, see [Language Services](/docs/advanced/language-services).
+</Callout>
+
+## Quick Actions (Light Bulbs)
+
+Add code suggestions:
+
+```csharp
+[Export(typeof(ISuggestedActionsSourceProvider))]
+[Name("My Suggested Actions")]
+[ContentType("text")]
+internal sealed class MySuggestedActionsSourceProvider : ISuggestedActionsSourceProvider
+{
+    public ISuggestedActionsSource CreateSuggestedActionsSource(
+        ITextView textView,
+        ITextBuffer textBuffer)
+    {
+        return new MySuggestedActionsSource(textView, textBuffer);
+    }
+}
+
+internal sealed class MySuggestedActionsSource : ISuggestedActionsSource
+{
+    private readonly ITextView _textView;
+    private readonly ITextBuffer _textBuffer;
+
+    public MySuggestedActionsSource(ITextView textView, ITextBuffer textBuffer)
+    {
+        _textView = textView;
+        _textBuffer = textBuffer;
+    }
+
+    public bool TryGetTelemetryId(out Guid telemetryId)
+    {
+        telemetryId = Guid.Empty;
+        return false;
+    }
+
+    public IEnumerable<SuggestedActionSet> GetSuggestedActions(
+        ISuggestedActionCategorySet requestedActionCategories,
+        SnapshotSpan range,
+        CancellationToken cancellationToken)
+    {
+        var actions = new List<ISuggestedAction>
+        {
+            new UpperCaseAction(range)
+        };
+
+        return new[] { new SuggestedActionSet(actions) };
+    }
+
+    public Task<bool> HasSuggestedActionsAsync(
+        ISuggestedActionCategorySet requestedActionCategories,
+        SnapshotSpan range,
+        CancellationToken cancellationToken)
+    {
+        return Task.FromResult(!range.IsEmpty);
+    }
+
+    public event EventHandler<EventArgs> SuggestedActionsChanged;
+
+    public void Dispose() { }
+}
+```
+
+## Listening to Editor Events
+
+```csharp
+[Export(typeof(IWpfTextViewCreationListener))]
+[ContentType("CSharp")]
+[TextViewRole(PredefinedTextViewRoles.Editable)]
+internal sealed class EditorEventListener : IWpfTextViewCreationListener
+{
+    public void TextViewCreated(IWpfTextView textView)
+    {
+        // Called when a C# editor opens
+        textView.TextBuffer.Changed += OnTextChanged;
+        textView.Caret.PositionChanged += OnCaretMoved;
+        textView.Closed += OnEditorClosed;
+    }
+
+    private void OnTextChanged(object sender, TextContentChangedEventArgs e)
+    {
+        foreach (var change in e.Changes)
+        {
+            // Handle text change
+        }
+    }
+
+    private void OnCaretMoved(object sender, CaretPositionChangedEventArgs e)
+    {
+        var newPosition = e.NewPosition.BufferPosition;
+        // Handle caret movement
+    }
+
+    private void OnEditorClosed(object sender, EventArgs e)
+    {
+        var textView = (IWpfTextView)sender;
+        textView.TextBuffer.Changed -= OnTextChanged;
+        textView.Caret.PositionChanged -= OnCaretMoved;
+        textView.Closed -= OnEditorClosed;
+    }
+}
+```
+
+## Next Steps
+
+Learn about [Options Pages](/docs/fundamentals/options-pages) to add settings to Tools > Options.

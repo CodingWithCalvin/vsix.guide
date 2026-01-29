@@ -1,0 +1,360 @@
+---
+title: Commands
+description: Learn how to create menu commands, toolbar buttons, and context menu items.
+category: fundamentals
+order: 4
+---
+
+import Callout from '@components/Callout.astro';
+
+Commands are user-invokable actions in Visual Studio. They appear in menus, toolbars, context menus, and can be executed via the Command Window.
+
+## Command Basics
+
+### With Community Toolkit
+
+The simplest way to create a command:
+
+```csharp
+[Command(PackageIds.MyCommand)]
+internal sealed class MyCommand : BaseCommand<MyCommand>
+{
+    protected override async Task ExecuteAsync(OleMenuCmdEventArgs e)
+    {
+        await VS.MessageBox.ShowAsync("Hello, World!");
+    }
+}
+```
+
+Register commands in your package:
+
+```csharp
+protected override async Task InitializeAsync(...)
+{
+    await this.RegisterCommandsAsync();
+}
+```
+
+### Traditional Approach
+
+Without the Community Toolkit:
+
+```csharp
+public sealed class MyPackage : AsyncPackage
+{
+    protected override async Task InitializeAsync(...)
+    {
+        await JoinableTaskFactory.SwitchToMainThreadAsync();
+
+        var commandService = await GetServiceAsync(typeof(IMenuCommandService)) as OleMenuCommandService;
+
+        var cmdId = new CommandID(PackageGuids.guidMyPackageCmdSet, PackageIds.MyCommand);
+        var menuItem = new MenuCommand(Execute, cmdId);
+        commandService.AddCommand(menuItem);
+    }
+
+    private void Execute(object sender, EventArgs e)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        // Command logic
+    }
+}
+```
+
+## Command Table (.vsct)
+
+The Visual Studio Command Table defines command placement and appearance:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<CommandTable xmlns="http://schemas.microsoft.com/VisualStudio/2005-10-18/CommandTable">
+  <Extern href="stdidcmd.h"/>
+  <Extern href="vsshlids.h"/>
+  <Include href="KnownImageIds.vsct"/>
+
+  <Commands package="guidMyPackage">
+    <Groups>
+      <Group guid="guidMyPackageCmdSet" id="MyMenuGroup" priority="0x0600">
+        <Parent guid="guidSHLMainMenu" id="IDM_VS_MENU_TOOLS"/>
+      </Group>
+    </Groups>
+
+    <Buttons>
+      <Button guid="guidMyPackageCmdSet" id="MyCommand" priority="0x0100" type="Button">
+        <Parent guid="guidMyPackageCmdSet" id="MyMenuGroup"/>
+        <Icon guid="ImageCatalogGuid" id="StatusInformation"/>
+        <CommandFlag>IconIsMoniker</CommandFlag>
+        <Strings>
+          <ButtonText>My Command</ButtonText>
+        </Strings>
+      </Button>
+    </Buttons>
+  </Commands>
+
+  <Symbols>
+    <GuidSymbol name="guidMyPackage" value="{your-package-guid}"/>
+    <GuidSymbol name="guidMyPackageCmdSet" value="{your-cmdset-guid}">
+      <IDSymbol name="MyMenuGroup" value="0x1020"/>
+      <IDSymbol name="MyCommand" value="0x0100"/>
+    </GuidSymbol>
+  </Symbols>
+</CommandTable>
+```
+
+## Command Placement
+
+### Menu Bar Commands
+
+Place commands in main menus:
+
+```xml
+<Group guid="guidMyPackageCmdSet" id="MyMenuGroup" priority="0x0600">
+  <!-- Tools menu -->
+  <Parent guid="guidSHLMainMenu" id="IDM_VS_MENU_TOOLS"/>
+</Group>
+```
+
+Common menu IDs:
+
+| Menu | ID |
+|------|-----|
+| File | `IDM_VS_MENU_FILE` |
+| Edit | `IDM_VS_MENU_EDIT` |
+| View | `IDM_VS_MENU_VIEW` |
+| Project | `IDM_VS_MENU_PROJECT` |
+| Build | `IDM_VS_MENU_BUILD` |
+| Debug | `IDM_VS_MENU_DEBUG` |
+| Tools | `IDM_VS_MENU_TOOLS` |
+| Extensions | `IDM_VS_MENU_EXTENSIONS` |
+
+### Context Menu Commands
+
+Add to editor context menu:
+
+```xml
+<Group guid="guidMyPackageCmdSet" id="EditorContextGroup" priority="0x0600">
+  <Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_CODEWIN"/>
+</Group>
+```
+
+Common context menus:
+
+| Context | ID |
+|---------|-----|
+| Code Editor | `IDM_VS_CTXT_CODEWIN` |
+| Solution Explorer (Solution) | `IDM_VS_CTXT_SOLNNODE` |
+| Solution Explorer (Project) | `IDM_VS_CTXT_PROJNODE` |
+| Solution Explorer (Item) | `IDM_VS_CTXT_ITEMNODE` |
+| Solution Explorer (Folder) | `IDM_VS_CTXT_FOLDERNODE` |
+
+### Toolbar Commands
+
+Create a custom toolbar:
+
+```xml
+<Menus>
+  <Menu guid="guidMyPackageCmdSet" id="MyToolbar" type="Toolbar">
+    <Strings>
+      <ButtonText>My Toolbar</ButtonText>
+    </Strings>
+  </Menu>
+</Menus>
+
+<Groups>
+  <Group guid="guidMyPackageCmdSet" id="MyToolbarGroup" priority="0x0000">
+    <Parent guid="guidMyPackageCmdSet" id="MyToolbar"/>
+  </Group>
+</Groups>
+```
+
+## Command State
+
+### Enabling/Disabling Commands
+
+With Community Toolkit:
+
+```csharp
+[Command(PackageIds.MyCommand)]
+internal sealed class MyCommand : BaseCommand<MyCommand>
+{
+    protected override void BeforeQueryStatus(EventArgs e)
+    {
+        // Only enable when a document is open
+        Command.Enabled = VS.Documents.GetActiveDocumentViewAsync().Result?.TextView != null;
+    }
+
+    protected override async Task ExecuteAsync(OleMenuCmdEventArgs e)
+    {
+        // Command logic
+    }
+}
+```
+
+Traditional approach:
+
+```csharp
+var menuItem = new OleMenuCommand(Execute, cmdId);
+menuItem.BeforeQueryStatus += (s, e) =>
+{
+    ThreadHelper.ThrowIfNotOnUIThread();
+    var cmd = (OleMenuCommand)s;
+    cmd.Enabled = /* your condition */;
+};
+```
+
+### Visibility
+
+Control when commands appear:
+
+```csharp
+protected override void BeforeQueryStatus(EventArgs e)
+{
+    Command.Visible = /* show/hide condition */;
+    Command.Enabled = /* enable/disable condition */;
+}
+```
+
+In VSCT, use visibility constraints:
+
+```xml
+<VisibilityConstraints>
+  <VisibilityItem guid="guidMyPackageCmdSet" id="MyCommand"
+                  context="UICONTEXT_SolutionExists"/>
+</VisibilityConstraints>
+```
+
+## Command Flags
+
+Modify command behavior with flags:
+
+```xml
+<Button ...>
+  <CommandFlag>DynamicVisibility</CommandFlag>
+  <CommandFlag>DefaultInvisible</CommandFlag>
+  <CommandFlag>TextChanges</CommandFlag>
+  ...
+</Button>
+```
+
+| Flag | Description |
+|------|-------------|
+| `DynamicVisibility` | Visibility can change at runtime |
+| `DefaultInvisible` | Hidden by default |
+| `DefaultDisabled` | Disabled by default |
+| `TextChanges` | Button text can change |
+| `IconAndText` | Show both icon and text |
+| `FixMenuController` | For menu controller behavior |
+
+## Keyboard Shortcuts
+
+### In VSCT
+
+```xml
+<KeyBindings>
+  <KeyBinding guid="guidMyPackageCmdSet" id="MyCommand"
+              editor="guidVSStd97"
+              key1="K" mod1="Control"
+              key2="M" mod2="Control"/>
+</KeyBindings>
+```
+
+This creates a Ctrl+K, Ctrl+M chord binding.
+
+<Callout type="note">
+Users can customize shortcuts in Tools > Options > Keyboard. Your default bindings may be overridden.
+</Callout>
+
+## Dynamic Commands
+
+### Changing Text
+
+```csharp
+[Command(PackageIds.MyCommand)]
+internal sealed class MyCommand : BaseCommand<MyCommand>
+{
+    private int _count = 0;
+
+    protected override void BeforeQueryStatus(EventArgs e)
+    {
+        Command.Text = $"Click Count: {_count}";
+    }
+
+    protected override async Task ExecuteAsync(OleMenuCmdEventArgs e)
+    {
+        _count++;
+    }
+}
+```
+
+Requires the `TextChanges` command flag in VSCT.
+
+### Checked State
+
+```csharp
+protected override void BeforeQueryStatus(EventArgs e)
+{
+    Command.Checked = _isFeatureEnabled;
+}
+```
+
+## Command Parameters
+
+Commands can receive parameters:
+
+```csharp
+protected override async Task ExecuteAsync(OleMenuCmdEventArgs e)
+{
+    // Get input from command window: >MyExtension.MyCommand "parameter"
+    var input = e.InValue as string;
+
+    if (!string.IsNullOrEmpty(input))
+    {
+        await VS.MessageBox.ShowAsync($"Parameter: {input}");
+    }
+}
+```
+
+## Complete Example
+
+```csharp
+[Command(PackageIds.FormatDocumentCommand)]
+internal sealed class FormatDocumentCommand : BaseCommand<FormatDocumentCommand>
+{
+    protected override void BeforeQueryStatus(EventArgs e)
+    {
+        // Only show for text files
+        var doc = VS.Documents.GetActiveDocumentViewAsync().Result;
+        Command.Visible = doc?.FilePath?.EndsWith(".txt") == true;
+        Command.Enabled = doc?.TextView != null;
+    }
+
+    protected override async Task ExecuteAsync(OleMenuCmdEventArgs e)
+    {
+        var docView = await VS.Documents.GetActiveDocumentViewAsync();
+        if (docView?.TextView == null) return;
+
+        // Get the text buffer
+        var textBuffer = docView.TextView.TextBuffer;
+
+        using (var edit = textBuffer.CreateEdit())
+        {
+            var text = edit.Snapshot.GetText();
+            var formatted = FormatText(text);
+            edit.Replace(0, text.Length, formatted);
+            edit.Apply();
+        }
+
+        await VS.StatusBar.ShowMessageAsync("Document formatted!");
+    }
+
+    private string FormatText(string text)
+    {
+        // Your formatting logic
+        return text.Trim();
+    }
+}
+```
+
+## Next Steps
+
+Learn about [Tool Windows](/docs/fundamentals/tool-windows) to create dockable UI panels.

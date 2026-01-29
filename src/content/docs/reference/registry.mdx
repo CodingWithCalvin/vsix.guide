@@ -1,0 +1,214 @@
+---
+title: Registry Keys Reference
+description: Registry structure documentation for Visual Studio extension registration.
+category: reference
+order: 3
+---
+
+VS extensions register via `.pkgdef` files which contain registry entries processed at startup.
+
+## Root Keys
+
+### $RootKey$ Token
+
+The `$RootKey$` token is replaced with the VS registry root:
+
+| VS Version | Registry Path |
+|------------|---------------|
+| VS 2015 | `HKCU\Software\Microsoft\VisualStudio\14.0` |
+| VS 2017 | `HKCU\Software\Microsoft\VisualStudio\15.0` |
+| VS 2019 | `HKCU\Software\Microsoft\VisualStudio\16.0` |
+| VS 2022 | `HKCU\Software\Microsoft\VisualStudio\17.0` |
+
+### Other Tokens
+
+| Token | Description |
+|-------|-------------|
+| `$RootFolder$` | VS installation directory |
+| `$PackageFolder$` | Extension installation directory |
+| `$WinDir$` | Windows directory |
+| `$System$` | System32 directory |
+| `$AppData$` | Application data folder |
+
+## Package Registration
+
+```
+[$RootKey$\Packages\{PackageGUID}]
+@="Package Display Name"
+"InprocServer32"="$PackageFolder$\MyPackage.dll"
+"Class"="MyNamespace.MyPackage"
+"Assembly"="MyPackage, Version=1.0.0.0, Culture=neutral"
+
+; Async loading support
+"AllowsBackgroundLoading"=dword:00000001
+"SupportAsyncLoad"=dword:00000001
+```
+
+## Auto Load Contexts
+
+```
+[$RootKey$\AutoLoadPackages\{ContextGUID}]
+"{PackageGUID}"=dword:00000000
+```
+
+### Common UI Contexts
+
+| Context | GUID |
+|---------|------|
+| No solution | `{ADFC4E64-0397-11D1-9F4E-00A0C911004F}` |
+| Solution exists | `{F1536EF8-92EC-443C-9ED7-FDADF150DA82}` |
+| Solution building | `{ADFC4E63-0397-11D1-9F4E-00A0C911004F}` |
+| Debugging | `{ADFC4E62-0397-11D1-9F4E-00A0C911004F}` |
+| Design mode | `{ADFC4E65-0397-11D1-9F4E-00A0C911004F}` |
+| Code window | `{8B382828-6202-11D1-8870-0000F87579D2}` |
+| Single project | `{ADFC4E66-0397-11D1-9F4E-00A0C911004F}` |
+| Multiple projects | `{93694FA0-0397-11D1-9F4E-00A0C911004F}` |
+| Empty solution | `{ADFC4E67-0397-11D1-9F4E-00A0C911004F}` |
+| Full screen | `{ADFC4E68-0397-11D1-9F4E-00A0C911004F}` |
+
+## Service Registration
+
+```
+[$RootKey$\Services\{ServiceGUID}]
+@="{PackageGUID}"
+"Name"="Service Display Name"
+```
+
+## Editor Factory Registration
+
+```
+[$RootKey$\Editors\{EditorGUID}]
+@="My Editor"
+"Package"="{PackageGUID}"
+"DisplayName"="#101"
+"DefaultLogicalView"="{TextEditorLogicalView}"
+
+[$RootKey$\Editors\{EditorGUID}\Extensions]
+"myext"=dword:00000032
+
+[$RootKey$\Editors\{EditorGUID}\LogicalViews]
+"{7651A702-06E5-11D1-8EBD-00A0C90F26EA}"=""
+```
+
+### Logical View GUIDs
+
+| View | GUID |
+|------|------|
+| Text editor | `{7651A702-06E5-11D1-8EBD-00A0C90F26EA}` |
+| Designer | `{7651A701-06E5-11D1-8EBD-00A0C90F26EA}` |
+| Code | `{7651A703-06E5-11D1-8EBD-00A0C90F26EA}` |
+| Debugging | `{7651A704-06E5-11D1-8EBD-00A0C90F26EA}` |
+| Primary | `{00000000-0000-0000-0000-000000000000}` |
+
+## Tool Window Registration
+
+```
+[$RootKey$\ToolWindows\{ToolWindowGUID}]
+@="My Tool Window"
+"Name"="My Tool Window"
+"Package"="{PackageGUID}"
+"Style"="Tabbed"
+"Orientation"="Right"
+"Window"="{ParentWindowGUID}"
+
+[$RootKey$\ToolWindows\{ToolWindowGUID}\Visibility]
+"{ContextGUID}"=""
+```
+
+### Standard Tool Window GUIDs
+
+| Window | GUID |
+|--------|------|
+| Solution Explorer | `{3AE79031-E1BC-11D0-8F78-00A0C9110057}` |
+| Properties | `{EEFA5220-E298-11D0-8F78-00A0C9110057}` |
+| Output | `{34E76E81-EE4A-11D0-AE2E-00A0C90FFFC3}` |
+| Error List | `{D78612C7-9962-4B83-95D9-268046DAD23A}` |
+| Task List | `{4A9B7E51-AA16-11D0-A8C5-00A0C921A4D2}` |
+| Toolbox | `{B1E99781-AB81-11D0-B683-00AA00A3EE26}` |
+| Class View | `{C9C0AE26-AA77-11D2-B3F0-0000F87570EE}` |
+| Command Window | `{28836128-FC2C-11D2-A433-00C04F72D18A}` |
+
+## Menu Registration
+
+```
+[$RootKey$\Menus]
+"{PackageGUID}"=", 1000, 1"
+
+[$RootKey$\Commands\{CommandSetGUID}\{CommandID}]
+"Package"="{PackageGUID}"
+"CommandFlags"=dword:00000000
+```
+
+### Standard Command Groups
+
+| Name | GUID |
+|------|------|
+| VS Standard 97 | `{5EFC7975-14BC-11CF-9B2B-00AA00573819}` |
+| VS Standard 2000 | `{1496A755-94DE-11D0-8C3F-00C04FC2AAE2}` |
+| VS Debug | `{C9DD4A58-47FB-11D2-83E7-00C04F9902C1}` |
+
+## Project Type Registration
+
+```
+[$RootKey$\Projects\{ProjectTypeGUID}]
+@="My Project Type"
+"Package"="{PackageGUID}"
+"ProjectTemplatesDir"="$PackageFolder$\Templates\Projects"
+"ItemTemplatesDir"="$PackageFolder$\Templates\Items"
+"DefaultProjectExtension"="myproj"
+```
+
+### Standard Project Types
+
+| Type | GUID |
+|------|------|
+| C# | `{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}` |
+| VB.NET | `{F184B08F-C81C-45F6-A57F-5ABD9991F28F}` |
+| C++ | `{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}` |
+| F# | `{F2A71F9B-5D33-465A-A702-920D77279786}` |
+| Solution Folder | `{2150E333-8FDC-42A3-9474-1A3956D46DE8}` |
+
+## Language Service Registration
+
+```
+[$RootKey$\Languages\Language Services\My Language]
+@="{PackageGUID}"
+"Package"="{PackageGUID}"
+"Extensions"=".myext"
+"RequestStockColors"=dword:00000001
+"ShowMatchingBrace"=dword:00000001
+"AutoOutlining"=dword:00000001
+
+[$RootKey$\Languages\File Extensions\.myext]
+@="{LanguageServiceGUID}"
+```
+
+## Output Window Panes
+
+```
+[$RootKey$\OutputWindow\{PaneGUID}]
+@="My Output Pane"
+"Package"="{PackageGUID}"
+"Name"="My Output Pane"
+"ClearWithSolution"=dword:00000001
+```
+
+### Standard Output Panes
+
+| Pane | GUID |
+|------|------|
+| Build | `{1BD8A850-02D1-11D1-BEE7-00A0C913D1F8}` |
+| Debug | `{FC076020-078A-11D1-A7DF-00A0C9110051}` |
+| General | `{65482C72-DEFA-41B7-902C-11C091889C83}` |
+
+## Options Page Registration
+
+```
+[$RootKey$\ToolsOptionsPages\My Category]
+@="My Category"
+
+[$RootKey$\ToolsOptionsPages\My Category\My Page]
+@="My Page"
+"Package"="{PackageGUID}"
+"Page"="{OptionsPageGUID}"
+```

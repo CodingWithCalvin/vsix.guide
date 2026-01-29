@@ -1,0 +1,283 @@
+---
+title: Packages
+description: Learn how to create and configure Visual Studio extension packages.
+category: fundamentals
+order: 3
+---
+
+import Callout from '@components/Callout.astro';
+
+A package is your extension's entry point and container. It registers your extension with Visual Studio and initializes your commands, tool windows, and services.
+
+## Package Basics
+
+### Minimal Package
+
+```csharp
+[PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
+[Guid("your-unique-guid-here")]
+public sealed class MyPackage : AsyncPackage
+{
+    protected override async Task InitializeAsync(
+        CancellationToken cancellationToken,
+        IProgress<ServiceProgressData> progress)
+    {
+        // Initialization code here
+    }
+}
+```
+
+### Using Community Toolkit
+
+The Toolkit provides a simpler base class:
+
+```csharp
+[PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
+[Guid(PackageGuids.MyPackageString)]
+[ProvideMenuResource("Menus.ctmenu", 1)]
+public sealed class MyPackage : ToolkitPackage
+{
+    protected override async Task InitializeAsync(
+        CancellationToken cancellationToken,
+        IProgress<ServiceProgressData> progress)
+    {
+        // Register all commands in the assembly
+        await this.RegisterCommandsAsync();
+    }
+}
+```
+
+## Package Attributes
+
+### PackageRegistration
+
+Required for all packages:
+
+```csharp
+[PackageRegistration(
+    UseManagedResourcesOnly = true,  // Use .NET resources (recommended)
+    AllowsBackgroundLoading = true   // Enable async loading (recommended)
+)]
+```
+
+<Callout type="tip">
+Always set `AllowsBackgroundLoading = true` for better VS startup performance.
+</Callout>
+
+### Guid
+
+Every package needs a unique identifier:
+
+```csharp
+[Guid("12345678-1234-1234-1234-123456789012")]
+```
+
+Generate new GUIDs in VS: **Tools > Create GUID** (format Registry Format)
+
+### ProvideMenuResource
+
+Links your package to its command table:
+
+```csharp
+[ProvideMenuResource("Menus.ctmenu", 1)]  // ctmenu compiled from .vsct
+```
+
+## Auto Loading
+
+### ProvideAutoLoad
+
+Load your package automatically in specific contexts:
+
+```csharp
+// Load when a solution exists
+[ProvideAutoLoad(VSConstants.UICONTEXT.SolutionExists_string, PackageAutoLoadFlags.BackgroundLoad)]
+
+// Load when a C# project is open
+[ProvideAutoLoad(VSConstants.UICONTEXT.CSharpProject_string, PackageAutoLoadFlags.BackgroundLoad)]
+
+// Load when no solution is open
+[ProvideAutoLoad(VSConstants.UICONTEXT.NoSolution_string, PackageAutoLoadFlags.BackgroundLoad)]
+```
+
+Common UI contexts:
+
+| Context | Description |
+|---------|-------------|
+| `NoSolution_string` | No solution is loaded |
+| `SolutionExists_string` | Any solution is loaded |
+| `SolutionHasMultipleProjects_string` | Solution has 2+ projects |
+| `CSharpProject_string` | C# project is loaded |
+| `VBProject_string` | VB project is loaded |
+| `FullyLoaded_string` | VS has fully loaded |
+
+<Callout type="warning">
+Avoid auto-loading when possible. It slows VS startup. Use on-demand loading instead.
+</Callout>
+
+### Custom UI Contexts
+
+Define custom load conditions:
+
+```csharp
+// Define the context
+[ProvideUIContextRule(
+    "your-context-guid",
+    name: "MyContext",
+    expression: "SolutionExists & CSharpProject",
+    termNames: new[] { "SolutionExists", "CSharpProject" },
+    termValues: new[] {
+        VSConstants.UICONTEXT.SolutionExists_string,
+        VSConstants.UICONTEXT.CSharpProject_string
+    })]
+
+// Use it for auto-load
+[ProvideAutoLoad("your-context-guid", PackageAutoLoadFlags.BackgroundLoad)]
+```
+
+## Initialization
+
+### InitializeAsync
+
+Called when your package loads:
+
+```csharp
+protected override async Task InitializeAsync(
+    CancellationToken cancellationToken,
+    IProgress<ServiceProgressData> progress)
+{
+    // Report progress during long initialization
+    progress.Report(new ServiceProgressData("Loading settings...", 1, 3));
+
+    // Do background work first (before switching to main thread)
+    var config = await LoadConfigAsync();
+
+    progress.Report(new ServiceProgressData("Registering commands...", 2, 3));
+
+    // Switch to main thread for VS operations
+    await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+
+    // Register commands, tool windows, etc.
+    await this.RegisterCommandsAsync();
+
+    progress.Report(new ServiceProgressData("Done", 3, 3));
+}
+```
+
+### Disposal
+
+Clean up resources when the package unloads:
+
+```csharp
+protected override void Dispose(bool disposing)
+{
+    if (disposing)
+    {
+        // Clean up managed resources
+        _myService?.Dispose();
+    }
+
+    base.Dispose(disposing);
+}
+```
+
+## Providing Services
+
+Your package can provide services for other extensions:
+
+```csharp
+[ProvideService(typeof(SMyService), IsAsyncQueryable = true)]
+public sealed class MyPackage : AsyncPackage
+{
+    protected override async Task InitializeAsync(...)
+    {
+        // Add service to the container
+        AddService(typeof(SMyService), CreateMyServiceAsync, true);
+    }
+
+    private async Task<object> CreateMyServiceAsync(
+        IAsyncServiceContainer container,
+        CancellationToken ct,
+        Type serviceType)
+    {
+        await JoinableTaskFactory.SwitchToMainThreadAsync(ct);
+        return new MyService();
+    }
+}
+```
+
+## Providing Options Pages
+
+Register options pages for Tools > Options:
+
+```csharp
+[ProvideOptionPage(
+    typeof(GeneralOptionsPage),
+    "My Extension",           // Category
+    "General",                // Page name
+    0, 0, true)]
+public sealed class MyPackage : AsyncPackage { }
+```
+
+## Providing Tool Windows
+
+Register tool windows:
+
+```csharp
+[ProvideToolWindow(typeof(MyToolWindow), Style = VsDockStyle.Tabbed, Window = "3ae79031-e1bc-11d0-8f78-00a0c9110057")]
+[ProvideToolWindowVisibility(typeof(MyToolWindow), VSConstants.UICONTEXT.SolutionExists_string)]
+public sealed class MyPackage : AsyncPackage { }
+```
+
+## Package Load Key (PLK)
+
+For signed assemblies, you may need a Package Load Key:
+
+```csharp
+[ProvideLoadKey(
+    minimumEdition: "Standard",  // VS edition
+    productVersion: "1.0",
+    productName: "My Extension",
+    companyName: "My Company",
+    resourceId: 1)]
+```
+
+<Callout type="note">
+PLKs are rarely needed for modern extensions. They were more common in older VS versions.
+</Callout>
+
+## Complete Example
+
+```csharp
+[PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
+[Guid(PackageGuids.MyPackageString)]
+[ProvideMenuResource("Menus.ctmenu", 1)]
+[ProvideAutoLoad(VSConstants.UICONTEXT.SolutionExists_string, PackageAutoLoadFlags.BackgroundLoad)]
+[ProvideOptionPage(typeof(GeneralOptionsPage), "My Extension", "General", 0, 0, true)]
+[ProvideToolWindow(typeof(MyToolWindow))]
+[ProvideService(typeof(SMyService), IsAsyncQueryable = true)]
+public sealed class MyPackage : ToolkitPackage
+{
+    protected override async Task InitializeAsync(
+        CancellationToken cancellationToken,
+        IProgress<ServiceProgressData> progress)
+    {
+        // Add custom service
+        AddService(typeof(SMyService), CreateServiceAsync, true);
+
+        // Register commands
+        await this.RegisterCommandsAsync();
+    }
+
+    private async Task<object> CreateServiceAsync(
+        IAsyncServiceContainer container,
+        CancellationToken ct,
+        Type serviceType)
+    {
+        return new MyService();
+    }
+}
+```
+
+## Next Steps
+
+Learn how to add [Commands](/docs/fundamentals/commands) to your extension.

@@ -1,0 +1,82 @@
+---
+title: Prerequisites
+description: Set up your development environment for Visual Studio extension development.
+category: getting-started
+order: 2
+---
+
+import Callout from '@components/Callout.astro';
+
+Before you can create Visual Studio extensions, you need to install the required tools and workloads.
+
+## Required Software
+
+### Visual Studio 2022
+
+You need Visual Studio 2022 (any edition) with the **Visual Studio extension development** workload installed.
+
+To install or add the workload:
+
+1. Open **Visual Studio Installer**
+2. Click **Modify** on your VS 2022 installation
+3. Go to the **Workloads** tab
+4. Check **Visual Studio extension development**
+5. Click **Modify** to install
+
+<Callout type="note">
+The extension development workload includes the Visual Studio SDK, project templates, and debugging tools.
+</Callout>
+
+### .NET Framework 4.8
+
+Visual Studio extensions target .NET Framework 4.8. This is typically already installed with Visual Studio, but you can verify or install it from [Microsoft's download page](https://dotnet.microsoft.com/download/dotnet-framework/net48).
+
+## Recommended Tools
+
+### VSIX Viewer
+
+The VSIX Viewer tool lets you inspect the contents of `.vsix` packages:
+
+```powershell
+# Install from Visual Studio Marketplace or via Extensions menu
+```
+
+### Extensibility Essentials
+
+The [Extensibility Essentials](https://marketplace.visualstudio.com/items?itemName=MadsKristensen.ExtensibilityEssentials2022) extension pack by Mads Kristensen includes helpful tools for extension development:
+
+- Command Explorer - Browse available VS commands
+- VSCT IntelliSense - Better editing for `.vsct` files
+- KnownMonikers Explorer - Browse VS image monikers
+- And more...
+
+<Callout type="tip">
+Install Extensibility Essentials 2022 from Extensions > Manage Extensions in Visual Studio.
+</Callout>
+
+## Project Templates
+
+After installing the workload, you'll have access to VSIX project templates:
+
+| Template | Description |
+|----------|-------------|
+| **VSIX Project** | Empty extension project |
+| **VSIX Project w/ Command** | Extension with a menu command |
+| **VSIX Project w/ Tool Window** | Extension with a dockable tool window |
+| **Editor Classifier** | Syntax highlighting extension |
+| **Editor Margin** | Custom editor margin |
+
+## Verify Your Setup
+
+To verify everything is installed correctly:
+
+1. Open Visual Studio 2022
+2. Go to **File > New > Project**
+3. Search for "VSIX"
+4. You should see the VSIX project templates
+
+If you see the templates, you're ready to create your first extension!
+
+## Next Steps
+
+Continue to [Your First Extension](/docs/getting-started/first-extension) to create a simple "Hello World" command.

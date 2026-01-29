@@ -1,0 +1,358 @@
+---
+title: Custom Project Types
+description: Learn how to create custom project systems for Visual Studio.
+category: advanced
+order: 6
+---
+
+import Callout from '@components/Callout.astro';
+
+Visual Studio's project system is highly extensible. You can create custom project types for new languages, build systems, or specialized workflows.
+
+## Project System Approaches
+
+| Approach | Complexity | Use Case |
+|----------|------------|----------|
+| Project Flavoring | Low | Extend existing project types |
+| CPS (Common Project System) | Medium | Modern project types (.NET-based) |
+| MPF (Managed Package Framework) | High | Full custom project system |
+
+## Project Flavoring
+
+Extend existing project types without creating a new system:
+
+```csharp
+[Guid("my-flavor-guid")]
+public class MyProjectFlavor : FlavoredProjectBase
+{
+    protected override void SetInnerProject(IntPtr innerIUnknown)
+    {
+        base.SetInnerProject(innerIUnknown);
+        // Access the base project
+    }
+
+    protected override int GetProperty(uint itemId, int propId, out object property)
+    {
+        // Customize project properties
+        if (propId == (int)__VSHPROPID.VSHPROPID_TypeName)
+        {
+            property = "My Custom Project";
+            return VSConstants.S_OK;
+        }
+        return base.GetProperty(itemId, propId, out property);
+    }
+}
+```
+
+### Flavor Factory
+
+```csharp
+[Guid("my-flavor-factory-guid")]
+public class MyProjectFlavorFactory : FlavoredProjectFactoryBase
+{
+    protected override object PreCreateForOuter(IntPtr outerProjectIUnknown)
+    {
+        return new MyProjectFlavor();
+    }
+}
+```
+
+### Registration
+
+```csharp
+[ProvideProjectFactory(
+    typeof(MyProjectFlavorFactory),
+    "My Project Flavor",
+    "My Projects (*.myproj)|*.myproj",
+    "myproj", "myproj",
+    @"Templates\Projects\MyProject",
+    LanguageVsTemplate = "MyLanguage")]
+[ProvideProjectFlavorPriority(typeof(MyProjectFlavorFactory), "{...csharp-project-guid...}")]
+public sealed class MyPackage : AsyncPackage { }
+```
+
+## CPS (Common Project System)
+
+Modern project system for .NET Core-style projects:
+
+### Project Type Definition
+
+```xml
+<!-- MyProjectType.targets -->
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <MyProjectType>true</MyProjectType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectCapability Include="MyProjectType" />
+  </ItemGroup>
+</Project>
+```
+
+### Capability-Based Extension
+
+```csharp
+[Export(typeof(IProjectTreePropertiesProvider))]
+[AppliesTo("MyProjectType")]
+public class MyProjectTreeProvider : IProjectTreePropertiesProvider
+{
+    public void CalculatePropertyValues(
+        IProjectTreeCustomizablePropertyContext propertyContext,
+        IProjectTreeCustomizablePropertyValues propertyValues)
+    {
+        // Customize tree node appearance
+        if (propertyValues.Flags.Contains(ProjectTreeFlags.Common.ProjectRoot))
+        {
+            propertyValues.Icon = MyIcons.ProjectIcon.ToProjectSystemType();
+        }
+    }
+}
+```
+
+### Project Properties
+
+```csharp
+[Export(typeof(IProjectPropertiesProvider))]
+[AppliesTo("MyProjectType")]
+public class MyProjectPropertiesProvider : IProjectPropertiesProvider
+{
+    public string DefaultProjectPath => "my.props";
+
+    public IProjectProperties GetCommonProperties()
+    {
+        return new MyProjectProperties();
+    }
+
+    public IProjectProperties GetItemProperties(
+        string itemType,
+        string item)
+    {
+        return new MyItemProperties(itemType, item);
+    }
+}
+```
+
+<Callout type="note">
+CPS is used by .NET Core, .NET 5+, and modern VS projects. It's the recommended approach for new project types.
+</Callout>
+
+## Custom Project System (MPF)
+
+For complete control, implement a full project system:
+
+### Project Factory
+
+```csharp
+[Guid("my-project-factory-guid")]
+public class MyProjectFactory : ProjectFactory
+{
+    private MyPackage _package;
+
+    public MyProjectFactory(MyPackage package) : base(package)
+    {
+        _package = package;
+    }
+
+    protected override ProjectNode CreateProject()
+    {
+        var project = new MyProjectNode(_package);
+        project.SetSite((IOleServiceProvider)((IServiceProvider)_package)
+            .GetService(typeof(IOleServiceProvider)));
+        return project;
+    }
+}
+```
+
+### Project Node
+
+```csharp
+[Guid("my-project-node-guid")]
+public class MyProjectNode : ProjectNode
+{
+    private MyPackage _package;
+
+    public MyProjectNode(MyPackage package)
+    {
+        _package = package;
+        SupportsProjectDesigner = true;
+    }
+
+    public override Guid ProjectGuid => typeof(MyProjectFactory).GUID;
+
+    public override string ProjectType => "MyProject";
+
+    public override FileNode CreateFileNode(ProjectElement item)
+    {
+        return new MyFileNode(this, item);
+    }
+
+    public override FolderNode CreateFolderNode(string path, ProjectElement element)
+    {
+        return new MyFolderNode(this, path, element);
+    }
+
+    protected override ConfigProvider CreateConfigProvider()
+    {
+        return new MyConfigProvider(this);
+    }
+}
+```
+
+### File Node
+
+```csharp
+public class MyFileNode : FileNode
+{
+    public MyFileNode(MyProjectNode root, ProjectElement element)
+        : base(root, element)
+    {
+    }
+
+    protected override NodeProperties CreatePropertiesObject()
+    {
+        return new MyFileNodeProperties(this);
+    }
+
+    public override int ImageIndex
+    {
+        get
+        {
+            // Return custom icon based on file type
+            if (FileName.EndsWith(".myext"))
+                return MyImageIndex.MyFileIcon;
+            return base.ImageIndex;
+        }
+    }
+}
+```
+
+## Project Templates
+
+### Creating a Project Template
+
+1. Create a template project structure:
+
+```
+MyTemplate/
+├── MyTemplate.vstemplate
+├── MyProject.myproj
+├── Program.cs
+└── AssemblyInfo.cs
+```
+
+2. Define the template manifest:
+
+```xml
+<!-- MyTemplate.vstemplate -->
+<VSTemplate Version="3.0.0" Type="Project"
+            xmlns="http://schemas.microsoft.com/developer/vstemplate/2005">
+  <TemplateData>
+    <Name>My Project</Name>
+    <Description>Create a new My Project</Description>
+    <ProjectType>MyLanguage</ProjectType>
+    <DefaultName>MyProject</DefaultName>
+    <Icon>icon.ico</Icon>
+  </TemplateData>
+  <TemplateContent>
+    <Project File="MyProject.myproj" ReplaceParameters="true">
+      <ProjectItem ReplaceParameters="true">Program.cs</ProjectItem>
+      <ProjectItem>AssemblyInfo.cs</ProjectItem>
+    </Project>
+  </TemplateContent>
+</VSTemplate>
+```
+
+### Template Parameters
+
+```csharp
+// In Program.cs template
+namespace $safeprojectname$
+{
+    public class $safeitemrootname$
+    {
+        // Created by $username$ on $time$
+    }
+}
+```
+
+Common parameters:
+
+| Parameter | Description |
+|-----------|-------------|
+| `$safeprojectname$` | Project name (safe for identifiers) |
+| `$projectname$` | Project name as entered |
+| `$safeitemrootname$` | File name without extension |
+| `$username$` | Current user name |
+| `$time$` | Current timestamp |
+| `$guid1$` - `$guid10$` | Generated GUIDs |
+
+## Project Properties UI
+
+### Custom Property Page
+
+```csharp
+[Guid("my-property-page-guid")]
+public class MyPropertyPage : SettingsPage
+{
+    public MyPropertyPage()
+    {
+        Name = "My Settings";
+    }
+
+    protected override void BindProperties()
+    {
+        // Bind UI to project properties
+        textBoxOutput.Text = ProjectManager.GetProjectProperty("OutputPath");
+    }
+
+    protected override int ApplyChanges()
+    {
+        // Save changes
+        ProjectManager.SetProjectProperty("OutputPath", textBoxOutput.Text);
+        return VSConstants.S_OK;
+    }
+}
+```
+
+## Build Integration
+
+### Custom Build System
+
+```csharp
+public class MyBuildManager
+{
+    private readonly MyProjectNode _project;
+
+    public MyBuildManager(MyProjectNode project)
+    {
+        _project = project;
+    }
+
+    public async Task<bool> BuildAsync(CancellationToken cancellationToken)
+    {
+        var outputWindow = await VS.Services.GetOutputWindowAsync();
+        // Get build output pane
+
+        try
+        {
+            // Execute build steps
+            foreach (var file in _project.GetBuildItems())
+            {
+                await CompileFileAsync(file, cancellationToken);
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // Log error
+            return false;
+        }
+    }
+}
+```
+
+## Next Steps
+
+Learn about [Performance](/docs/advanced/performance) best practices for VS extensions.

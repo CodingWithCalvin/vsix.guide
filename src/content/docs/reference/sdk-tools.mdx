@@ -1,0 +1,208 @@
+---
+title: SDK Tools Reference
+description: Reference for Visual Studio SDK tools and utilities.
+category: reference
+order: 5
+---
+
+The Visual Studio SDK includes several tools for extension development.
+
+## Build Tools
+
+### VsixInstaller.exe
+
+Command-line VSIX installation:
+
+```powershell
+# Install an extension
+VsixInstaller.exe /quiet MyExtension.vsix
+
+# Uninstall by extension ID
+VsixInstaller.exe /uninstall:MyExtension.UniqueGuid
+
+# Install to experimental instance
+VsixInstaller.exe /rootSuffix:Exp MyExtension.vsix
+```
+
+Location: `C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\VSIXInstaller.exe`
+
+### CreateExpInstance.exe
+
+Manage experimental instances:
+
+```powershell
+# Reset experimental instance
+CreateExpInstance.exe /Reset /VSInstance=17.0 /RootSuffix=Exp
+
+# Create new experimental instance
+CreateExpInstance.exe /Create /VSInstance=17.0 /RootSuffix=MyTest
+```
+
+### devenv.exe Commands
+
+```powershell
+# Reset experimental instance settings
+devenv.exe /ResetSettings /rootsuffix Exp
+
+# Clear VS cache
+devenv.exe /ClearCache /rootsuffix Exp
+
+# Run in safe mode
+devenv.exe /SafeMode
+
+# Generate activity log
+devenv.exe /Log
+
+# Run with experimental instance
+devenv.exe /rootSuffix Exp
+```
+
+## Design Tools
+
+### VSCT Compiler (vsct.exe)
+
+Compiles `.vsct` command table files:
+
+```powershell
+vsct.exe MyCommands.vsct MyCommands.cto -S MyCommands.cs
+```
+
+### ResGen (resgen.exe)
+
+Resource file generation:
+
+```powershell
+resgen.exe Resources.resx Resources.resources
+```
+
+## Debugging Tools
+
+### ActivityLog.xml
+
+VS activity log location:
+```
+%APPDATA%\Microsoft\VisualStudio\17.0_<hash>\ActivityLog.xml
+```
+
+Enable verbose logging:
+```powershell
+devenv.exe /Log
+# Or set environment variable
+$env:VSLOGENABLED = "1"
+```
+
+### Error List Inspection
+
+View MEF composition errors:
+1. Help > About Microsoft Visual Studio
+2. Click "Copy Info"
+3. Check for extension errors
+
+## Package Development
+
+### PkgDef Files
+
+Package definition file format:
+
+```
+; Package registration
+[$RootKey$\Packages\{GUID}]
+@="My Package"
+"InprocServer32"="$PackageFolder$\MyPackage.dll"
+"Class"="MyNamespace.MyPackage"
+```
+
+### Generating PkgDef
+
+The build process auto-generates `.pkgdef` files from attributes:
+
+```csharp
+[PackageRegistration(UseManagedResourcesOnly = true)]
+[Guid("...")]
+public sealed class MyPackage : AsyncPackage { }
+```
+
+## Registry Tools
+
+### RegPkg.exe
+
+Register packages manually:
+
+```powershell
+regpkg.exe /root:Software\Microsoft\VisualStudio\17.0 MyPackage.dll
+```
+
+### CreatePkgDef.exe
+
+Generate .pkgdef from assembly:
+
+```powershell
+CreatePkgDef.exe MyPackage.dll MyPackage.pkgdef
+```
+
+## Template Tools
+
+### Project Template Structure
+
+```
+MyTemplate/
+├── MyTemplate.vstemplate
+├── MyProject.csproj
+├── Program.cs
+└── __TemplateIcon.ico
+```
+
+### Item Template Structure
+
+```
+MyItemTemplate/
+├── MyItemTemplate.vstemplate
+├── MyClass.cs
+└── __TemplateIcon.ico
+```
+
+### Template Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `$safeprojectname$` | Safe project name for identifiers |
+| `$projectname$` | Project name as entered |
+| `$safeitemrootname$` | File name without extension |
+| `$rootnamespace$` | Root namespace |
+| `$guid1$` - `$guid10$` | Generated GUIDs |
+| `$time$` | Current timestamp |
+| `$year$` | Current year |
+| `$username$` | Current user |
+| `$registeredorganization$` | Organization name |
+| `$targetframeworkversion$` | Target framework |
+
+## Command Line Tools Summary
+
+| Tool | Purpose |
+|------|---------|
+| `VsixInstaller.exe` | Install/uninstall VSIX |
+| `CreateExpInstance.exe` | Manage experimental instances |
+| `devenv.exe` | VS with command options |
+| `vsct.exe` | Compile command tables |
+| `regpkg.exe` | Register packages |
+| `CreatePkgDef.exe` | Generate pkgdef |
+
+## NuGet Packages
+
+### Essential Packages
+
+| Package | Purpose |
+|---------|---------|
+| `Microsoft.VSSDK.BuildTools` | Build tools for VSIX |
+| `Microsoft.VisualStudio.SDK` | VS SDK reference assemblies |
+| `Community.VisualStudio.Toolkit.17` | Community Toolkit |
+| `Microsoft.VisualStudio.LanguageServer.Client` | LSP client |
+
+### Installing SDK
+
+```xml
+<PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.0.*">
+  <PrivateAssets>all</PrivateAssets>
+  <IncludeAssets>runtime; build; native</IncludeAssets>
+</PackageReference>
+```

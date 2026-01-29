@@ -1,0 +1,244 @@
+---
+title: Service Provider
+description: Learn how to access Visual Studio services using the service provider pattern.
+category: fundamentals
+order: 2
+---
+
+import Callout from '@components/Callout.astro';
+
+Visual Studio exposes functionality through services. Understanding how to access these services is fundamental to extension development.
+
+## The Service Provider Pattern
+
+VS uses the **Service Locator** pattern. You request services by their interface type, and VS returns the appropriate implementation:
+
+```csharp
+// Request a service by type
+IVsSolution solution = await serviceProvider.GetServiceAsync(typeof(SVsSolution)) as IVsSolution;
+```
+
+Key concepts:
+- **Service Type (SType)** - The "key" used to request the service (e.g., `SVsSolution`)
+- **Interface Type** - The interface you cast to (e.g., `IVsSolution`)
+- **Implementation** - VS's internal implementation
+
+<Callout type="note">
+Service types often have an "S" prefix (SVsSolution), while interfaces have an "I" prefix (IVsSolution). They're not always the same type.
+</Callout>
+
+## Getting Services
+
+### With Community Toolkit
+
+The simplest way to get services:
+
+```csharp
+// Typed service access
+var solution = await VS.Services.GetSolutionAsync();
+var shell = await VS.Services.GetUIShellAsync();
+
+// Generic access
+var dte = await VS.GetServiceAsync<DTE, DTE2>();
+```
+
+### From AsyncPackage
+
+In your package class:
+
+```csharp
+public sealed class MyPackage : AsyncPackage
+{
+    protected override async Task InitializeAsync(
+        CancellationToken cancellationToken,
+        IProgress<ServiceProgressData> progress)
+    {
+        // Get service from package
+        var solution = await GetServiceAsync(typeof(SVsSolution)) as IVsSolution;
+
+        // Or use the generic version
+        var shell = await GetServiceAsync<SVsUIShell, IVsUIShell>();
+    }
+}
+```
+
+### From Commands
+
+In command classes:
+
+```csharp
+[Command(PackageIds.MyCommand)]
+internal sealed class MyCommand : BaseCommand<MyCommand>
+{
+    protected override async Task ExecuteAsync(OleMenuCmdEventArgs e)
+    {
+        // Use VS helper
+        var solution = await VS.Solutions.GetCurrentSolutionAsync();
+
+        // Or get service directly
+        var outputWindow = await VS.Services.GetOutputWindowAsync();
+    }
+}
+```
+
+## Common Services
+
+### DTE (Development Tools Environment)
+
+The automation object model for VS:
+
+```csharp
+var dte = await VS.GetServiceAsync<DTE, DTE2>();
+
+// Get active document
+var activeDocument = dte.ActiveDocument;
+
+// Get solution path
+var solutionPath = dte.Solution.FullName;
+
+// Execute a VS command
+dte.ExecuteCommand("Edit.FormatDocument");
+```
+
+### IVsSolution
+
+Solution and project management:
+
+```csharp
+var solution = await VS.Services.GetSolutionAsync();
+
+// Get solution directory
+solution.GetSolutionInfo(out string solutionDir, out string solutionFile, out string userOpts);
+
+// Enumerate projects
+var hierarchy = solution.GetProjectEnum((uint)__VSENUMPROJFLAGS.EPF_LOADEDINSOLUTION, Guid.Empty, out IEnumHierarchies enumHierarchies);
+```
+
+### IVsUIShell
+
+UI operations:
+
+```csharp
+var shell = await VS.Services.GetUIShellAsync();
+
+// Show message box
+shell.ShowMessageBox(0, Guid.Empty, "Title", "Message", null, 0,
+    OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST,
+    OLEMSGICON.OLEMSGICON_INFO, 0, out int result);
+
+// Find a tool window
+shell.FindToolWindow((uint)__VSFINDTOOLWIN.FTW_fForceCreate, typeof(MyToolWindow).GUID, out IVsWindowFrame frame);
+```
+
+### IVsOutputWindow
+
+Writing to the Output window:
+
+```csharp
+var outputWindow = await VS.Services.GetOutputWindowAsync();
+
+// Create or get a pane
+Guid paneGuid = Guid.NewGuid();
+outputWindow.CreatePane(ref paneGuid, "My Extension", 1, 1);
+outputWindow.GetPane(ref paneGuid, out IVsOutputWindowPane pane);
+
+// Write output
+pane.OutputStringThreadSafe("Hello from my extension!\n");
+pane.Activate();
+```
+
+## Async vs Sync Services
+
+### Async (Recommended)
+
+Always prefer async service access:
+
+```csharp
+// Async - does not block the UI thread
+var service = await VS.GetServiceAsync<SMyService, IMyService>();
+```
+
+### Sync (Legacy)
+
+Synchronous access should be avoided but may be needed for legacy code:
+
+```csharp
+// Sync - may block the UI thread
+ThreadHelper.ThrowIfNotOnUIThread();
+var service = Package.GetGlobalService(typeof(SMyService)) as IMyService;
+```
+
+<Callout type="warning">
+Synchronous service access can cause UI freezes and should be avoided in new code.
+</Callout>
+
+## Service Availability
+
+Not all services are available at all times:
+
+```csharp
+var service = await VS.GetServiceAsync<SMyService, IMyService>();
+if (service == null)
+{
+    // Service not available - handle gracefully
+    await VS.StatusBar.ShowMessageAsync("Required service not available");
+    return;
+}
+```
+
+### UI Context
+
+Some services require VS to be in a specific state:
+
+```csharp
+// Wait for solution to load before accessing solution services
+[ProvideAutoLoad(VSConstants.UICONTEXT.SolutionExists_string, PackageAutoLoadFlags.BackgroundLoad)]
+public sealed class MyPackage : AsyncPackage { }
+```
+
+## Providing Your Own Services
+
+Extensions can expose services to other extensions:
+
+```csharp
+// Define service interface
+public interface IMyService
+{
+    Task<string> DoWorkAsync();
+}
+
+// Define service type
+[Guid("your-service-guid")]
+public interface SMyService { }
+
+// Implement the service
+public class MyService : IMyService
+{
+    public async Task<string> DoWorkAsync()
+    {
+        return "Work done!";
+    }
+}
+
+// Register in package
+[ProvideService(typeof(SMyService), IsAsyncQueryable = true)]
+public sealed class MyPackage : AsyncPackage
+{
+    protected override async Task InitializeAsync(...)
+    {
+        AddService(typeof(SMyService), CreateServiceAsync);
+    }
+
+    private async Task<object> CreateServiceAsync(
+        IAsyncServiceContainer container,
+        CancellationToken cancellationToken,
+        Type serviceType)
+    {
+        return new MyService();
+    }
+}
+```
+
+## Next Steps
+
+Learn about [Packages](/docs/fundamentals/packages) to understand how to structure your extension's entry point.

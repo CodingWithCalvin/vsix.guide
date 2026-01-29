@@ -1,0 +1,448 @@
+---
+title: MEF Components
+description: Learn how to create editor extensions using the Managed Extensibility Framework.
+category: advanced
+order: 2
+---
+
+import Callout from '@components/Callout.astro';
+
+The Visual Studio editor uses MEF (Managed Extensibility Framework) for extensibility. MEF components are automatically discovered and composed at runtime without explicit registration.
+
+## MEF Basics
+
+### Export and Import
+
+MEF uses attributes to declare exports and imports:
+
+```csharp
+// Export a service
+[Export(typeof(IMyService))]
+public class MyService : IMyService
+{
+    public void DoWork() { }
+}
+
+// Import the service elsewhere
+[Export(typeof(IMyConsumer))]
+public class MyConsumer : IMyConsumer
+{
+    [Import]
+    private IMyService _service;
+
+    public void Consume()
+    {
+        _service.DoWork();
+    }
+}
+```
+
+### Metadata
+
+Add metadata to exports:
+
+```csharp
+[Export(typeof(IMyHandler))]
+[ExportMetadata("Name", "MyHandler")]
+[ExportMetadata("Priority", 100)]
+public class MyHandler : IMyHandler { }
+
+// Import with metadata
+[ImportMany]
+private IEnumerable<Lazy<IMyHandler, IHandlerMetadata>> _handlers;
+```
+
+## Editor Extension Points
+
+### Text View Creation Listener
+
+React when editors open:
+
+```csharp
+[Export(typeof(IWpfTextViewCreationListener))]
+[ContentType("CSharp")]
+[TextViewRole(PredefinedTextViewRoles.Document)]
+internal sealed class CSharpEditorListener : IWpfTextViewCreationListener
+{
+    [Import]
+    internal IClassificationFormatMapService FormatMapService { get; set; }
+
+    [Import]
+    internal IEditorFormatMapService EditorFormatMapService { get; set; }
+
+    public void TextViewCreated(IWpfTextView textView)
+    {
+        // Called when a C# document editor is created
+        textView.Properties.GetOrCreateSingletonProperty(
+            () => new CSharpEditorEnhancement(textView, FormatMapService));
+    }
+}
+```
+
+### Content Type Definition
+
+Define custom content types:
+
+```csharp
+internal static class ContentTypes
+{
+    [Export]
+    [Name("myLanguage")]
+    [BaseDefinition("code")]
+    internal static ContentTypeDefinition MyLanguageContentType;
+
+    [Export]
+    [FileExtension(".mylang")]
+    [ContentType("myLanguage")]
+    internal static FileExtensionToContentTypeDefinition MyLanguageFileExtension;
+}
+```
+
+<Callout type="note">
+Content types form a hierarchy. Defining `BaseDefinition("code")` means your type inherits all code editor features.
+</Callout>
+
+## Classification (Syntax Highlighting)
+
+### Classification Type Definition
+
+```csharp
+internal static class ClassificationTypes
+{
+    [Export(typeof(ClassificationTypeDefinition))]
+    [Name("myLanguage.keyword")]
+    internal static ClassificationTypeDefinition KeywordType;
+
+    [Export(typeof(ClassificationTypeDefinition))]
+    [Name("myLanguage.string")]
+    internal static ClassificationTypeDefinition StringType;
+
+    [Export(typeof(ClassificationTypeDefinition))]
+    [Name("myLanguage.comment")]
+    internal static ClassificationTypeDefinition CommentType;
+}
+```
+
+### Classification Format Definition
+
+```csharp
+[Export(typeof(EditorFormatDefinition))]
+[ClassificationType(ClassificationTypeNames = "myLanguage.keyword")]
+[Name("myLanguage.keyword")]
+[UserVisible(true)]
+[Order(Before = Priority.Default)]
+internal sealed class KeywordFormat : ClassificationFormatDefinition
+{
+    public KeywordFormat()
+    {
+        DisplayName = "MyLanguage Keyword";
+        ForegroundColor = Colors.Blue;
+        IsBold = true;
+    }
+}
+
+[Export(typeof(EditorFormatDefinition))]
+[ClassificationType(ClassificationTypeNames = "myLanguage.string")]
+[Name("myLanguage.string")]
+[UserVisible(true)]
+internal sealed class StringFormat : ClassificationFormatDefinition
+{
+    public StringFormat()
+    {
+        DisplayName = "MyLanguage String";
+        ForegroundColor = Color.FromRgb(214, 157, 133);
+    }
+}
+```
+
+### Classifier Provider
+
+```csharp
+[Export(typeof(IClassifierProvider))]
+[ContentType("myLanguage")]
+internal sealed class MyLanguageClassifierProvider : IClassifierProvider
+{
+    [Import]
+    internal IClassificationTypeRegistryService ClassificationRegistry { get; set; }
+
+    public IClassifier GetClassifier(ITextBuffer buffer)
+    {
+        return buffer.Properties.GetOrCreateSingletonProperty(
+            () => new MyLanguageClassifier(ClassificationRegistry));
+    }
+}
+
+internal sealed class MyLanguageClassifier : IClassifier
+{
+    private readonly IClassificationType _keywordType;
+    private readonly IClassificationType _stringType;
+    private readonly IClassificationType _commentType;
+
+    public MyLanguageClassifier(IClassificationTypeRegistryService registry)
+    {
+        _keywordType = registry.GetClassificationType("myLanguage.keyword");
+        _stringType = registry.GetClassificationType("myLanguage.string");
+        _commentType = registry.GetClassificationType("myLanguage.comment");
+    }
+
+    public event EventHandler<ClassificationChangedEventArgs> ClassificationChanged;
+
+    public IList<ClassificationSpan> GetClassificationSpans(SnapshotSpan span)
+    {
+        var result = new List<ClassificationSpan>();
+        var text = span.GetText();
+
+        // Example: classify keywords
+        var keywords = new[] { "if", "else", "for", "while", "return" };
+        foreach (var keyword in keywords)
+        {
+            var index = 0;
+            while ((index = text.IndexOf(keyword, index)) >= 0)
+            {
+                var keywordSpan = new SnapshotSpan(span.Snapshot, span.Start + index, keyword.Length);
+                result.Add(new ClassificationSpan(keywordSpan, _keywordType));
+                index += keyword.Length;
+            }
+        }
+
+        return result;
+    }
+}
+```
+
+## Adornments
+
+### Adornment Layer Definition
+
+```csharp
+[Export(typeof(AdornmentLayerDefinition))]
+[Name("MyAdornment")]
+[Order(After = PredefinedAdornmentLayers.Selection, Before = PredefinedAdornmentLayers.Text)]
+[TextViewRole(PredefinedTextViewRoles.Document)]
+internal AdornmentLayerDefinition _adornmentLayer;
+```
+
+### Viewport Adornment
+
+Add decorations to the editor viewport:
+
+```csharp
+[Export(typeof(IWpfTextViewCreationListener))]
+[ContentType("text")]
+[TextViewRole(PredefinedTextViewRoles.Document)]
+internal sealed class ViewportAdornmentFactory : IWpfTextViewCreationListener
+{
+    [Export(typeof(AdornmentLayerDefinition))]
+    [Name("ViewportAdornment")]
+    [Order(After = PredefinedAdornmentLayers.Caret)]
+    private AdornmentLayerDefinition _adornmentLayer;
+
+    public void TextViewCreated(IWpfTextView textView)
+    {
+        new ViewportAdornment(textView);
+    }
+}
+
+internal sealed class ViewportAdornment
+{
+    private readonly IAdornmentLayer _layer;
+    private readonly IWpfTextView _view;
+    private readonly Canvas _canvas;
+
+    public ViewportAdornment(IWpfTextView view)
+    {
+        _view = view;
+        _layer = view.GetAdornmentLayer("ViewportAdornment");
+
+        _canvas = new Canvas();
+        _canvas.Children.Add(new TextBlock
+        {
+            Text = "My Adornment",
+            Foreground = Brushes.Gray,
+            FontSize = 10
+        });
+
+        _view.ViewportHeightChanged += OnViewportChanged;
+        _view.ViewportWidthChanged += OnViewportChanged;
+
+        UpdatePosition();
+    }
+
+    private void OnViewportChanged(object sender, EventArgs e)
+    {
+        UpdatePosition();
+    }
+
+    private void UpdatePosition()
+    {
+        _layer.RemoveAllAdornments();
+
+        Canvas.SetLeft(_canvas, _view.ViewportRight - 100);
+        Canvas.SetTop(_canvas, _view.ViewportBottom - 20);
+
+        _layer.AddAdornment(AdornmentPositioningBehavior.ViewportRelative,
+            null, null, _canvas, null);
+    }
+}
+```
+
+## Completion (IntelliSense)
+
+### Completion Source Provider
+
+```csharp
+[Export(typeof(ICompletionSourceProvider))]
+[ContentType("myLanguage")]
+[Name("myLanguageCompletion")]
+internal sealed class MyCompletionSourceProvider : ICompletionSourceProvider
+{
+    [Import]
+    internal IGlyphService GlyphService { get; set; }
+
+    public ICompletionSource TryCreateCompletionSource(ITextBuffer textBuffer)
+    {
+        return new MyCompletionSource(textBuffer, GlyphService);
+    }
+}
+
+internal sealed class MyCompletionSource : ICompletionSource
+{
+    private readonly ITextBuffer _buffer;
+    private readonly IGlyphService _glyphService;
+
+    public MyCompletionSource(ITextBuffer buffer, IGlyphService glyphService)
+    {
+        _buffer = buffer;
+        _glyphService = glyphService;
+    }
+
+    public void AugmentCompletionSession(
+        ICompletionSession session,
+        IList<CompletionSet> completionSets)
+    {
+        var completions = new List<Completion>
+        {
+            new Completion("if", "if", "Conditional statement",
+                _glyphService.GetGlyph(StandardGlyphGroup.GlyphKeyword, StandardGlyphItem.GlyphItemPublic), null),
+            new Completion("for", "for", "Loop statement",
+                _glyphService.GetGlyph(StandardGlyphGroup.GlyphKeyword, StandardGlyphItem.GlyphItemPublic), null),
+            new Completion("while", "while", "Loop statement",
+                _glyphService.GetGlyph(StandardGlyphGroup.GlyphKeyword, StandardGlyphItem.GlyphItemPublic), null),
+        };
+
+        var applicableTo = session.TextView.TextSnapshot.CreateTrackingSpan(
+            session.GetTriggerPoint(session.TextView.TextBuffer).Value.Position,
+            0,
+            SpanTrackingMode.EdgeInclusive);
+
+        completionSets.Add(new CompletionSet("Keywords", "Keywords", applicableTo, completions, null));
+    }
+
+    public void Dispose() { }
+}
+```
+
+## Quick Info (Hover Tooltips)
+
+```csharp
+[Export(typeof(IAsyncQuickInfoSourceProvider))]
+[Name("myLanguageQuickInfo")]
+[ContentType("myLanguage")]
+internal sealed class MyQuickInfoSourceProvider : IAsyncQuickInfoSourceProvider
+{
+    public IAsyncQuickInfoSource TryCreateQuickInfoSource(ITextBuffer textBuffer)
+    {
+        return new MyQuickInfoSource(textBuffer);
+    }
+}
+
+internal sealed class MyQuickInfoSource : IAsyncQuickInfoSource
+{
+    private readonly ITextBuffer _buffer;
+
+    public MyQuickInfoSource(ITextBuffer buffer)
+    {
+        _buffer = buffer;
+    }
+
+    public async Task<QuickInfoItem> GetQuickInfoItemAsync(
+        IAsyncQuickInfoSession session,
+        CancellationToken cancellationToken)
+    {
+        var triggerPoint = session.GetTriggerPoint(_buffer.CurrentSnapshot);
+        if (triggerPoint == null) return null;
+
+        var line = triggerPoint.Value.GetContainingLine();
+        var lineText = line.GetText();
+
+        // Example: show info for specific words
+        var word = GetWordAtPoint(triggerPoint.Value);
+        if (word == "myKeyword")
+        {
+            var span = new TrackingSpan(...);
+            return new QuickInfoItem(span,
+                new ContainerElement(ContainerElementStyle.Stacked,
+                    new ClassifiedTextElement(
+                        new ClassifiedTextRun(PredefinedClassificationTypeNames.Keyword, "myKeyword"),
+                        new ClassifiedTextRun(PredefinedClassificationTypeNames.Text, " - A special keyword"))));
+        }
+
+        return null;
+    }
+
+    public void Dispose() { }
+}
+```
+
+## Best Practices
+
+### Lazy Loading
+
+Use `Lazy<T>` for expensive imports:
+
+```csharp
+[Import]
+private Lazy<IExpensiveService> _service;
+
+public void DoWork()
+{
+    // Service only created when accessed
+    _service.Value.Process();
+}
+```
+
+### Disposing Resources
+
+Implement proper disposal:
+
+```csharp
+internal sealed class MyComponent : IDisposable
+{
+    private readonly IWpfTextView _textView;
+    private bool _disposed;
+
+    public MyComponent(IWpfTextView textView)
+    {
+        _textView = textView;
+        _textView.Closed += OnClosed;
+    }
+
+    private void OnClosed(object sender, EventArgs e)
+    {
+        Dispose();
+    }
+
+    public void Dispose()
+    {
+        if (!_disposed)
+        {
+            _textView.Closed -= OnClosed;
+            _disposed = true;
+        }
+    }
+}
+```
+
+## Next Steps
+
+Learn about [Language Services](/docs/advanced/language-services) for complete language support including IntelliSense and navigation.

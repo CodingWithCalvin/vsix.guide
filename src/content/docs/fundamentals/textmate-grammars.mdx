@@ -1,0 +1,397 @@
+---
+title: TextMate Grammars
+description: Add syntax highlighting for custom languages using TextMate grammar files.
+category: fundamentals
+order: 9
+---
+
+import Callout from '@components/Callout.astro';
+
+Visual Studio 2017+ supports TextMate grammar files (`.tmLanguage`, `.tmGrammar`) for syntax highlighting. This provides a simpler alternative to writing MEF classifiers for basic colorization.
+
+## Overview
+
+TextMate grammars are JSON or XML files that define patterns for tokenizing source code. They're the same format used by VS Code, Sublime Text, and other editors.
+
+Benefits:
+- No C# code required for basic syntax highlighting
+- Reuse existing grammars from VS Code or other editors
+- Quick iteration without recompiling
+
+Limitations:
+- Colorization only (no IntelliSense, error checking, etc.)
+- Less performant than native classifiers for complex languages
+- Limited integration with VS features
+
+## Grammar File Structure
+
+### JSON Format (.tmLanguage.json)
+
+```json
+{
+  "name": "MyLanguage",
+  "scopeName": "source.mylang",
+  "fileTypes": ["mylang", "ml"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#keywords" },
+    { "include": "#strings" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.mylang",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.mylang",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.mylang",
+          "match": "\\b(if|else|for|while|return|function)\\b"
+        },
+        {
+          "name": "keyword.other.mylang",
+          "match": "\\b(var|let|const)\\b"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.mylang",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.mylang",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+```
+
+### PList Format (.tmLanguage)
+
+The older XML plist format:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>name</key>
+  <string>MyLanguage</string>
+  <key>scopeName</key>
+  <string>source.mylang</string>
+  <key>fileTypes</key>
+  <array>
+    <string>mylang</string>
+  </array>
+  <key>patterns</key>
+  <array>
+    <dict>
+      <key>name</key>
+      <string>keyword.control.mylang</string>
+      <key>match</key>
+      <string>\b(if|else|for|while|return)\b</string>
+    </dict>
+  </array>
+</dict>
+</plist>
+```
+
+## Scope Names
+
+TextMate uses hierarchical scope names that map to VS colors:
+
+| Scope | VS Classification | Color |
+|-------|-------------------|-------|
+| `comment` | Comment | Green |
+| `keyword` | Keyword | Blue |
+| `string` | String | Red/Brown |
+| `constant.numeric` | Number | Light Green |
+| `entity.name.function` | Method Name | Yellow |
+| `entity.name.type` | Type Name | Teal |
+| `variable` | Identifier | Default |
+| `storage.type` | Keyword | Blue |
+
+<Callout type="tip">
+Use the most specific scope name possible. VS maps scopes hierarchically, so `keyword.control` inherits from `keyword`.
+</Callout>
+
+## Registering Grammars in VS
+
+### Using pkgdef
+
+Register your grammar in a `.pkgdef` file:
+
+```
+; Register the grammar
+[$RootKey$\TextMate\Repositories]
+"MyLanguage"="$PackageFolder$\Grammars"
+
+; Associate file extensions
+[$RootKey$\Languages\File Extensions\.mylang]
+@="{MyLanguageGuid}"
+"Grammar"="source.mylang"
+```
+
+### Content Type Definition
+
+Define a content type for your language:
+
+```csharp
+internal static class MyLanguageContentType
+{
+    [Export]
+    [Name("mylanguage")]
+    [BaseDefinition("code")]
+    internal static ContentTypeDefinition MyLanguageContentTypeDefinition;
+
+    [Export]
+    [FileExtension(".mylang")]
+    [ContentType("mylanguage")]
+    internal static FileExtensionToContentTypeDefinition MyLanguageFileExtension;
+}
+```
+
+### Grammar Provider
+
+Export a grammar provider to register the TextMate grammar:
+
+```csharp
+[Export(typeof(ITmGrammarRegistration))]
+internal class MyLanguageGrammarRegistration : ITmGrammarRegistration
+{
+    public void RegisterGrammars(ITmGrammarRegistrationContext context)
+    {
+        // Register the grammar file
+        context.RegisterGrammar(
+            "source.mylang",
+            Path.Combine(
+                Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location),
+                "Grammars",
+                "mylanguage.tmLanguage.json"));
+    }
+}
+```
+
+<Callout type="note">
+The `ITmGrammarRegistration` interface is available in `Microsoft.VisualStudio.TextMate.VSInterop`.
+</Callout>
+
+## Including Grammar Files
+
+### Project Setup
+
+1. Add your grammar file to the project
+2. Set **Build Action** to `Content`
+3. Set **Include in VSIX** to `true`
+4. Set **Copy to Output Directory** to `Copy if newer`
+
+```xml
+<ItemGroup>
+  <Content Include="Grammars\mylanguage.tmLanguage.json">
+    <IncludeInVSIX>true</IncludeInVSIX>
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+  </Content>
+</ItemGroup>
+```
+
+### VSIX Manifest
+
+Include the grammar folder as content:
+
+```xml
+<Asset Type="Microsoft.VisualStudio.Content"
+       Path="Grammars"
+       d:Source="Project"
+       Addressable="true" />
+```
+
+## Pattern Matching
+
+### Match Patterns
+
+Single-line patterns:
+
+```json
+{
+  "name": "constant.numeric.mylang",
+  "match": "\\b[0-9]+(\\.[0-9]+)?\\b"
+}
+```
+
+### Begin/End Patterns
+
+Multi-line patterns:
+
+```json
+{
+  "name": "string.quoted.triple.mylang",
+  "begin": "\"\"\"",
+  "end": "\"\"\"",
+  "patterns": [
+    {
+      "name": "constant.character.escape.mylang",
+      "match": "\\\\."
+    }
+  ]
+}
+```
+
+### Captures
+
+Name captured groups:
+
+```json
+{
+  "match": "\\b(function)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(",
+  "captures": {
+    "1": { "name": "keyword.control.mylang" },
+    "2": { "name": "entity.name.function.mylang" }
+  }
+}
+```
+
+### Include Patterns
+
+Reference repository items:
+
+```json
+{
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "source.html" }
+  ]
+}
+```
+
+## Debugging Grammars
+
+### Enable Logging
+
+Add to your `devenv.exe.config`:
+
+```xml
+<system.diagnostics>
+  <switches>
+    <add name="TextMate" value="4" />
+  </switches>
+</system.diagnostics>
+```
+
+### Test in VS Code First
+
+VS Code has excellent TextMate debugging tools:
+1. Install your grammar in VS Code
+2. Use **Developer: Inspect Editor Tokens and Scopes** command
+3. Verify scopes are assigned correctly
+
+## Complete Example
+
+### mylanguage.tmLanguage.json
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "MyLanguage",
+  "scopeName": "source.mylang",
+  "fileTypes": ["mylang"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#keywords" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#functions" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.mylang",
+          "match": "#.*$"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.mylang",
+          "match": "\\b(if|else|elif|for|while|return|break|continue)\\b"
+        },
+        {
+          "name": "storage.type.mylang",
+          "match": "\\b(func|var|const|class|struct)\\b"
+        },
+        {
+          "name": "constant.language.mylang",
+          "match": "\\b(true|false|null)\\b"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.mylang",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.mylang",
+              "match": "\\\\[\\\\\"nrt]"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.mylang",
+          "begin": "'",
+          "end": "'"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.mylang",
+          "match": "\\b0x[0-9a-fA-F]+\\b"
+        },
+        {
+          "name": "constant.numeric.mylang",
+          "match": "\\b[0-9]+(\\.[0-9]+)?\\b"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "match": "\\b(func)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(",
+          "captures": {
+            "1": { "name": "storage.type.function.mylang" },
+            "2": { "name": "entity.name.function.mylang" }
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+## Resources
+
+- [TextMate Language Grammars](https://macromates.com/manual/en/language_grammars)
+- [VS Code Grammar Guide](https://code.visualstudio.com/api/language-extensions/syntax-highlight-guide)
+- [Scope Naming Conventions](https://www.sublimetext.com/docs/scope_naming.html)

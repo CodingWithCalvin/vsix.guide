@@ -1,0 +1,210 @@
+---
+title: Advanced Overview
+description: Explore advanced Visual Studio extension topics including MEF, language services, and debugger integration.
+category: advanced
+order: 1
+---
+
+import Callout from '@components/Callout.astro';
+
+This section covers advanced extension development topics for developers who want to build sophisticated Visual Studio integrations.
+
+## What You'll Learn
+
+| Topic | Description |
+|-------|-------------|
+| [MEF Components](/docs/advanced/mef-components) | Editor extensions using Managed Extensibility Framework |
+| [Language Services](/docs/advanced/language-services) | IntelliSense, syntax highlighting, and code navigation |
+| [Debugger Integration](/docs/advanced/debugger-integration) | Custom debug engines and visualizers |
+| [Source Control](/docs/advanced/source-control) | Version control provider integration |
+| [Project Types](/docs/advanced/project-types) | Custom project systems |
+| [Performance](/docs/advanced/performance) | Optimization techniques and best practices |
+
+## Prerequisites
+
+Before diving into advanced topics, ensure you're comfortable with:
+
+- [Service Provider](/docs/fundamentals/service-provider) patterns
+- [Packages](/docs/fundamentals/packages) and registration
+- [Commands](/docs/fundamentals/commands) and UI
+- [Async Services](/docs/fundamentals/async-services) and threading
+
+## Advanced Architecture
+
+### MEF (Managed Extensibility Framework)
+
+MEF is used extensively in the VS editor for composition:
+
+```csharp
+[Export(typeof(IWpfTextViewCreationListener))]
+[ContentType("CSharp")]
+[TextViewRole(PredefinedTextViewRoles.Editable)]
+internal sealed class MyEditorExtension : IWpfTextViewCreationListener
+{
+    [Import]
+    internal IClassificationTypeRegistryService ClassificationRegistry { get; set; }
+
+    public void TextViewCreated(IWpfTextView textView)
+    {
+        // Extension is automatically instantiated by MEF
+    }
+}
+```
+
+<Callout type="note">
+MEF components are discovered and composed at runtime. Unlike packages, they don't require explicit registration.
+</Callout>
+
+### Language Service Protocol (LSP)
+
+Modern language services can use LSP for cross-editor compatibility:
+
+```csharp
+[Export(typeof(ILanguageClient))]
+[ContentType("myLanguage")]
+public class MyLanguageClient : ILanguageClient
+{
+    public string Name => "My Language Server";
+
+    public async Task<Connection> ActivateAsync(CancellationToken token)
+    {
+        var process = StartLanguageServer();
+        return new Connection(process.StandardOutput.BaseStream,
+                             process.StandardInput.BaseStream);
+    }
+}
+```
+
+### Visual Studio SDK Interop
+
+Advanced scenarios often require direct COM interop:
+
+```csharp
+// Get the running object table
+IVsRunningDocumentTable rdt = await VS.Services.GetRunningDocumentTableAsync();
+
+// Enumerate open documents
+rdt.GetRunningDocumentsEnum(out IEnumRunningDocuments enumDocs);
+uint[] cookies = new uint[1];
+while (enumDocs.Next(1, cookies, out uint fetched) == VSConstants.S_OK && fetched == 1)
+{
+    rdt.GetDocumentInfo(cookies[0], out uint flags, out uint readLocks,
+        out uint editLocks, out string moniker, out IVsHierarchy hierarchy,
+        out uint itemId, out IntPtr docData);
+}
+```
+
+## Common Advanced Patterns
+
+### Deferred Initialization
+
+Load expensive components only when needed:
+
+```csharp
+public class MyService : IMyService
+{
+    private readonly Lazy<ExpensiveComponent> _component;
+
+    public MyService()
+    {
+        _component = new Lazy<ExpensiveComponent>(() =>
+        {
+            // Only created on first access
+            return new ExpensiveComponent();
+        });
+    }
+
+    public void DoWork()
+    {
+        _component.Value.Process();
+    }
+}
+```
+
+### Weak Event Handlers
+
+Prevent memory leaks with weak events:
+
+```csharp
+public class MyComponent
+{
+    private readonly ITextBuffer _buffer;
+
+    public MyComponent(ITextBuffer buffer)
+    {
+        _buffer = buffer;
+        // Use weak event manager
+        WeakEventManager<ITextBuffer, TextContentChangedEventArgs>
+            .AddHandler(buffer, nameof(ITextBuffer.Changed), OnBufferChanged);
+    }
+
+    private void OnBufferChanged(object sender, TextContentChangedEventArgs e)
+    {
+        // Handle change
+    }
+}
+```
+
+### Solution Load Events
+
+React to solution lifecycle:
+
+```csharp
+VS.Events.SolutionEvents.OnAfterOpenSolution += OnSolutionOpened;
+VS.Events.SolutionEvents.OnBeforeCloseSolution += OnSolutionClosing;
+VS.Events.SolutionEvents.OnAfterOpenProject += OnProjectOpened;
+
+private void OnSolutionOpened(Solution solution)
+{
+    // Initialize solution-specific features
+}
+```
+
+## Debugging Advanced Extensions
+
+### Diagnostic Logging
+
+Add detailed logging for troubleshooting:
+
+```csharp
+private static readonly TraceSource _trace = new TraceSource("MyExtension");
+
+public async Task DoWorkAsync()
+{
+    _trace.TraceEvent(TraceEventType.Information, 0, "Starting work...");
+    try
+    {
+        await PerformWorkAsync();
+        _trace.TraceEvent(TraceEventType.Information, 0, "Work completed.");
+    }
+    catch (Exception ex)
+    {
+        _trace.TraceEvent(TraceEventType.Error, 0, $"Error: {ex}");
+        throw;
+    }
+}
+```
+
+### Performance Profiling
+
+Use VS's built-in profiling:
+
+```csharp
+// Mark performance-sensitive regions
+using (var marker = new PerformanceMarker("MyOperation"))
+{
+    // Code to measure
+}
+```
+
+## Getting Help
+
+For advanced scenarios:
+
+- [Visual Studio SDK Documentation](https://learn.microsoft.com/visualstudio/extensibility/)
+- [VS Extensibility GitHub](https://github.com/microsoft/VSExtensibility)
+- [VSSDK Extensibility Samples](https://github.com/microsoft/VSSDK-Extensibility-Samples)
+
+## Next Steps
+
+Start with [MEF Components](/docs/advanced/mef-components) to learn about editor extensibility through composition.
