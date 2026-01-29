@@ -19,8 +19,5 @@ export default defineConfig({
       langs: ['csharp', 'xml', 'json', 'powershell', 'bash'],
       wrap: true
     }
-  },
-  redirects: {
-    '/docs': '/docs/getting-started/introduction'
   }
 });

@@ -1,0 +1,41 @@
+---
+title: Fundamentals Overview
+description: Core concepts and patterns for Visual Studio extension development.
+category: fundamentals
+order: 1
+---
+
+This section covers the fundamental concepts you need to understand when building Visual Studio extensions.
+
+## What You'll Learn
+
+- **Service Provider Pattern** - How to access VS services
+- **AsyncPackage** - Modern package implementation
+- **Commands** - Adding menu items and keyboard shortcuts
+- **Tool Windows** - Creating dockable windows
+- **Editors** - Extending the text editor
+- **Options Pages** - Adding settings UI
+
+## Prerequisites
+
+Before diving into these topics, make sure you've completed the [Getting Started](/introduction) section and have a working extension project.
+
+## Core Architecture
+
+Visual Studio extensions are built on several key architectural patterns:
+
+### COM and Managed Code
+
+Visual Studio's core is COM-based, but the VS SDK provides managed wrappers. Understanding when you're crossing this boundary helps explain some API patterns.
+
+### MEF (Managed Extensibility Framework)
+
+Many editor features use MEF for discovery and composition. Components export interfaces that VS imports automatically.
+
+### Services
+
+VS provides functionality through services - singleton objects accessed via the service provider pattern. This decouples components and enables extensibility.
+
+## Next Steps
+
+Start with [Service Provider](/service-provider) to understand how to access Visual Studio's functionality from your extension.

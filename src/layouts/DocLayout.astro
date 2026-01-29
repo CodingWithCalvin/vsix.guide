@@ -42,7 +42,7 @@ const currentPath = Astro.url.pathname.replace(/\/$/, '');
                 <>
                   <div class="sidebar-category">{category.label}</div>
                   {category.docs.map((doc) => {
-                    const href = `/docs/${doc.id}`;
+                    const href = `/${doc.id}`;
                     const isActive = currentPath === href;
                     return (
                       <a
@@ -72,7 +72,7 @@ const currentPath = Astro.url.pathname.replace(/\/$/, '');
                 <>
                   <div class="sidebar-category">{category.label}</div>
                   {category.docs.map((doc) => {
-                    const href = `/docs/${doc.id}`;
+                    const href = `/${doc.id}`;
                     const isActive = currentPath === href;
                     return (
                       <a
