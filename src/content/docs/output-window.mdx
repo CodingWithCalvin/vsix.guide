@@ -1,0 +1,319 @@
+---
+title: Output Window
+description: Learn how to create custom output panes and write messages to the Output window.
+category: fundamentals
+order: 8
+---
+
+import Callout from '@components/Callout.astro';
+
+The Output window displays status messages, build output, debug information, and other runtime text. Extensions can create custom output panes to display their own messages.
+
+## Quick Start with Community Toolkit
+
+The simplest way to write to the Output window:
+
+```csharp
+// Write to the General pane
+await VS.Windows.WriteToOutputWindowAsync("Hello from my extension!");
+
+// Write to a custom pane (created if it doesn't exist)
+var pane = await VS.Windows.CreateOutputWindowPaneAsync("My Extension");
+await pane.WriteLineAsync("Extension initialized successfully");
+```
+
+## Creating a Custom Output Pane
+
+### With Community Toolkit
+
+```csharp
+public class MyExtension
+{
+    private OutputWindowPane _pane;
+
+    public async Task InitializeAsync()
+    {
+        // Create or get existing pane
+        _pane = await VS.Windows.CreateOutputWindowPaneAsync("My Extension");
+    }
+
+    public async Task LogAsync(string message)
+    {
+        await _pane.WriteLineAsync($"[{DateTime.Now:HH:mm:ss}] {message}");
+    }
+
+    public async Task LogErrorAsync(string error)
+    {
+        await _pane.WriteLineAsync($"ERROR: {error}");
+        await _pane.ActivateAsync(); // Bring pane to front
+    }
+}
+```
+
+### Traditional Approach
+
+```csharp
+public class OutputPaneManager
+{
+    private static readonly Guid PaneGuid = new Guid("YOUR-GUID-HERE");
+    private IVsOutputWindowPane _pane;
+
+    public async Task InitializeAsync(AsyncPackage package)
+    {
+        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+        var outputWindow = await package.GetServiceAsync(typeof(SVsOutputWindow)) as IVsOutputWindow;
+
+        // Create the pane
+        outputWindow.CreatePane(
+            ref PaneGuid,
+            "My Extension",
+            fInitVisible: 1,
+            fClearWithSolution: 1);
+
+        outputWindow.GetPane(ref PaneGuid, out _pane);
+    }
+
+    public void WriteLine(string message)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        _pane?.OutputStringThreadSafe($"{message}{Environment.NewLine}");
+    }
+
+    public void Activate()
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        _pane?.Activate();
+    }
+
+    public void Clear()
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        _pane?.Clear();
+    }
+}
+```
+
+## Writing to Built-in Panes
+
+Visual Studio has several built-in output panes you can write to:
+
+### General Pane
+
+```csharp
+// Community Toolkit
+await VS.Windows.WriteToOutputWindowAsync("Message to General pane");
+
+// Traditional
+var outputWindow = (IVsOutputWindow)GetService(typeof(SVsOutputWindow));
+var generalPaneGuid = VSConstants.GUID_OutWindowGeneralPane;
+outputWindow.GetPane(ref generalPaneGuid, out var generalPane);
+generalPane.OutputStringThreadSafe("Message to General pane\n");
+```
+
+### Build Pane
+
+```csharp
+var buildPaneGuid = VSConstants.GUID_BuildOutputWindowPane;
+outputWindow.GetPane(ref buildPaneGuid, out var buildPane);
+buildPane.OutputStringThreadSafe("Build message\n");
+```
+
+### Debug Pane
+
+```csharp
+var debugPaneGuid = VSConstants.GUID_OutWindowDebugPane;
+outputWindow.GetPane(ref debugPaneGuid, out var debugPane);
+debugPane.OutputStringThreadSafe("Debug message\n");
+```
+
+## Built-in Pane GUIDs
+
+| Pane | GUID | Constant |
+|------|------|----------|
+| General | `{65482C72-DEFA-41B7-902C-11C091889C83}` | `VSConstants.GUID_OutWindowGeneralPane` |
+| Build | `{1BD8A850-02D1-11D1-BEE7-00A0C913D1F8}` | `VSConstants.GUID_BuildOutputWindowPane` |
+| Debug | `{FC076020-078A-11D1-A7DF-00A0C9110051}` | `VSConstants.GUID_OutWindowDebugPane` |
+
+## Output Methods
+
+### OutputStringThreadSafe vs OutputString
+
+```csharp
+// Thread-safe - can be called from any thread
+pane.OutputStringThreadSafe("Safe from any thread\n");
+
+// Must be on UI thread
+await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+pane.OutputString("Must be on UI thread\n");
+```
+
+<Callout type="tip">
+Always prefer `OutputStringThreadSafe` unless you need special formatting or are already on the UI thread.
+</Callout>
+
+### Formatted Output
+
+```csharp
+// Add timestamp prefix
+public void Log(string message)
+{
+    var timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
+    _pane.OutputStringThreadSafe($"[{timestamp}] {message}\n");
+}
+
+// Log levels
+public void LogInfo(string message) => Log($"INFO: {message}");
+public void LogWarning(string message) => Log($"WARN: {message}");
+public void LogError(string message) => Log($"ERROR: {message}");
+```
+
+## Pane Options
+
+When creating a pane, you can configure its behavior:
+
+```csharp
+outputWindow.CreatePane(
+    ref paneGuid,
+    "My Extension",
+    fInitVisible: 1,      // 1 = visible in dropdown, 0 = hidden until first write
+    fClearWithSolution: 1 // 1 = clear when solution closes, 0 = preserve content
+);
+```
+
+| Parameter | Values | Description |
+|-----------|--------|-------------|
+| `fInitVisible` | 0 or 1 | Whether pane appears in dropdown before first write |
+| `fClearWithSolution` | 0 or 1 | Whether to clear content when solution closes |
+
+## Showing and Activating
+
+```csharp
+// Show the Output window (bring to front)
+await VS.Windows.ShowOutputWindowAsync();
+
+// Activate your specific pane
+await pane.ActivateAsync();
+
+// Traditional approach
+var outputWindow = (IVsOutputWindow)GetService(typeof(SVsOutputWindow));
+outputWindow.GetPane(ref paneGuid, out var pane);
+pane.Activate();
+
+// Show Output window via UI shell
+var uiShell = (IVsUIShell)GetService(typeof(SVsUIShell));
+var outputWindowGuid = new Guid("{34E76E81-EE4A-11D0-AE2E-00A0C90FFFC3}");
+uiShell.FindToolWindow((uint)__VSFINDTOOLWIN.FTW_fForceCreate, ref outputWindowGuid, out var frame);
+frame.Show();
+```
+
+## Complete Example
+
+A reusable logging service for your extension:
+
+```csharp
+using System;
+using System.Threading.Tasks;
+using Community.VisualStudio.Toolkit;
+using Microsoft.VisualStudio.Shell;
+
+public interface IExtensionLogger
+{
+    Task LogAsync(string message);
+    Task LogWarningAsync(string message);
+    Task LogErrorAsync(string message);
+    Task ClearAsync();
+}
+
+public class ExtensionLogger : IExtensionLogger
+{
+    private readonly string _paneName;
+    private OutputWindowPane _pane;
+
+    public ExtensionLogger(string paneName)
+    {
+        _paneName = paneName;
+    }
+
+    private async Task EnsurePaneAsync()
+    {
+        _pane ??= await VS.Windows.CreateOutputWindowPaneAsync(_paneName);
+    }
+
+    public async Task LogAsync(string message)
+    {
+        await EnsurePaneAsync();
+        await _pane.WriteLineAsync($"[{DateTime.Now:HH:mm:ss}] {message}");
+    }
+
+    public async Task LogWarningAsync(string message)
+    {
+        await EnsurePaneAsync();
+        await _pane.WriteLineAsync($"[{DateTime.Now:HH:mm:ss}] ⚠ WARNING: {message}");
+    }
+
+    public async Task LogErrorAsync(string message)
+    {
+        await EnsurePaneAsync();
+        await _pane.WriteLineAsync($"[{DateTime.Now:HH:mm:ss}] ❌ ERROR: {message}");
+        await _pane.ActivateAsync();
+    }
+
+    public async Task ClearAsync()
+    {
+        await EnsurePaneAsync();
+        await _pane.ClearAsync();
+    }
+}
+
+// Usage in your package
+public sealed class MyPackage : ToolkitPackage
+{
+    public static IExtensionLogger Logger { get; private set; }
+
+    protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
+    {
+        await base.InitializeAsync(cancellationToken, progress);
+
+        Logger = new ExtensionLogger("My Extension");
+        await Logger.LogAsync("Extension loaded successfully");
+    }
+}
+
+// Usage anywhere in your extension
+await MyPackage.Logger.LogAsync("Processing file...");
+await MyPackage.Logger.LogErrorAsync("Failed to process file");
+```
+
+## Best Practices
+
+1. **Use descriptive pane names** - Make it clear which extension owns the pane
+2. **Add timestamps** - Helps users understand when events occurred
+3. **Use thread-safe methods** - Prefer `OutputStringThreadSafe` for background operations
+4. **Don't spam** - Only log meaningful information
+5. **Activate on errors** - Bring the pane to attention when something goes wrong
+6. **Clear appropriately** - Don't clear too often; users may want to scroll back
+
+<Callout type="warning">
+Avoid writing large amounts of text rapidly. This can freeze the UI. For high-volume logging, consider batching writes or using a separate log file.
+</Callout>
+
+## Deleting a Pane
+
+Remove a custom pane when it's no longer needed:
+
+```csharp
+var outputWindow = (IVsOutputWindow)GetService(typeof(SVsOutputWindow));
+var paneGuid = new Guid("YOUR-PANE-GUID");
+outputWindow.DeletePane(ref paneGuid);
+```
+
+<Callout type="note">
+You cannot delete built-in panes (General, Build, Debug).
+</Callout>
+
+## See Also
+
+- [Tool Windows](tool-windows) - Creating custom dockable windows
+- [Error List](error-list) - Displaying errors, warnings, and messages
+- [Status Bar](status-bar) - Brief status messages
