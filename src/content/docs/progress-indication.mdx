@@ -1,0 +1,419 @@
+---
+title: Progress Indication
+description: Learn how to show progress dialogs, status bar progress, and handle long-running operations.
+category: fundamentals
+order: 10
+---
+
+import Callout from '@components/Callout.astro';
+
+Long-running operations should provide feedback to users. Visual Studio offers several ways to indicate progress: threaded wait dialogs, status bar progress, and background task notifications.
+
+## Quick Start with Community Toolkit
+
+```csharp
+// Simple status bar progress
+await VS.StatusBar.ShowProgressAsync("Processing files...", 1, 3);
+await VS.StatusBar.ShowProgressAsync("Processing files...", 2, 3);
+await VS.StatusBar.ShowProgressAsync("Processing files...", 3, 3);
+await VS.StatusBar.ClearAsync();
+
+// With cancellation support
+using var progress = await VS.StatusBar.StartAnimationAsync(StatusAnimation.General);
+// Do work...
+```
+
+## Threaded Wait Dialog
+
+For operations that block the UI, use `IVsThreadedWaitDialogFactory`:
+
+```csharp
+public async Task DoLongRunningWorkAsync()
+{
+    await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+    var dialogFactory = await VS.Services.GetThreadedWaitDialogAsync();
+
+    dialogFactory.CreateInstance(out var dialog);
+
+    dialog.StartWaitDialog(
+        szWaitCaption: "My Extension",
+        szWaitMessage: "Processing...",
+        szProgressText: null,
+        varStatusBmpAnim: null,
+        szStatusBarText: "Working...",
+        iDelayToShowDialog: 2,  // Show after 2 seconds
+        fIsCancelable: true,
+        fShowMarqueeProgress: true);
+
+    try
+    {
+        for (int i = 0; i < 100; i++)
+        {
+            // Check for cancellation
+            dialog.HasCanceled(out bool canceled);
+            if (canceled)
+            {
+                break;
+            }
+
+            // Update progress
+            dialog.UpdateProgress(
+                szUpdatedWaitMessage: "Processing...",
+                szProgressText: $"Step {i + 1} of 100",
+                szStatusBarText: "Working...",
+                iCurrentStep: i + 1,
+                iTotalSteps: 100,
+                fDisableCancel: false,
+                pfCanceled: out canceled);
+
+            await Task.Delay(50); // Simulate work
+        }
+    }
+    finally
+    {
+        dialog.EndWaitDialog(out _);
+    }
+}
+```
+
+## IVsThreadedWaitDialog4
+
+The modern interface with async support:
+
+```csharp
+public async Task ProcessWithDialogAsync(IEnumerable<string> files)
+{
+    await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+    var dialogFactory = (IVsThreadedWaitDialogFactory)
+        await AsyncServiceProvider.GlobalProvider.GetServiceAsync(typeof(SVsThreadedWaitDialogFactory));
+
+    var session = dialogFactory.StartWaitDialog(
+        "My Extension",
+        new ThreadedWaitDialogProgressData(
+            waitMessage: "Initializing...",
+            progressText: string.Empty,
+            statusBarText: "Processing files...",
+            isCancelable: true,
+            currentStep: 0,
+            totalSteps: 0));
+
+    try
+    {
+        var fileList = files.ToList();
+        int current = 0;
+
+        foreach (var file in fileList)
+        {
+            current++;
+
+            session.Progress.Report(new ThreadedWaitDialogProgressData(
+                waitMessage: $"Processing {Path.GetFileName(file)}",
+                progressText: $"File {current} of {fileList.Count}",
+                statusBarText: $"Processing: {file}",
+                isCancelable: true,
+                currentStep: current,
+                totalSteps: fileList.Count));
+
+            if (session.UserCancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+
+            await ProcessFileAsync(file, session.UserCancellationToken);
+        }
+    }
+    finally
+    {
+        session.Dispose();
+    }
+}
+```
+
+## Status Bar Progress
+
+For less intrusive progress indication:
+
+### Simple Progress
+
+```csharp
+// Show progress (currentStep / totalSteps)
+await VS.StatusBar.ShowProgressAsync("Building index...", 5, 10);
+
+// Clear when done
+await VS.StatusBar.ClearAsync();
+```
+
+### Animated Icon
+
+```csharp
+// Start animation
+await VS.StatusBar.StartAnimationAsync(StatusAnimation.Build);
+
+// Do work...
+
+// Stop animation
+await VS.StatusBar.EndAnimationAsync(StatusAnimation.Build);
+```
+
+### Available Animations
+
+| Animation | Description |
+|-----------|-------------|
+| `StatusAnimation.General` | Generic animation |
+| `StatusAnimation.Build` | Build in progress |
+| `StatusAnimation.Save` | Save operation |
+| `StatusAnimation.Deploy` | Deployment |
+| `StatusAnimation.Sync` | Synchronization |
+| `StatusAnimation.Find` | Search/find operation |
+| `StatusAnimation.Print` | Print operation |
+
+### Traditional Approach
+
+```csharp
+public async Task ShowStatusBarProgressAsync()
+{
+    await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+    var statusBar = (IVsStatusbar)await VS.Services.GetStatusBarAsync();
+
+    // Initialize progress
+    statusBar.Progress(ref _progressCookie, fInProgress: 1, "Working...", 0, 100);
+
+    for (int i = 0; i <= 100; i += 10)
+    {
+        statusBar.Progress(ref _progressCookie, fInProgress: 1, "Working...", (uint)i, 100);
+        await Task.Delay(100);
+    }
+
+    // Clear progress
+    statusBar.Progress(ref _progressCookie, fInProgress: 0, string.Empty, 0, 0);
+}
+```
+
+## Background Tasks with IVsTaskStatusCenterService
+
+For truly background operations, use the Task Status Center:
+
+```csharp
+public async Task RunBackgroundTaskAsync()
+{
+    var taskCenter = (IVsTaskStatusCenterService)
+        await VS.Services.GetTaskStatusCenterAsync();
+
+    var options = default(TaskHandlerOptions);
+    options.Title = "Indexing Solution";
+    options.ActionsAfterCompletion = CompletionActions.None;
+
+    var data = default(TaskProgressData);
+    data.CanBeCanceled = true;
+
+    var handler = taskCenter.PreRegister(options, data);
+    var task = IndexSolutionAsync(handler);
+    handler.RegisterTask(task);
+}
+
+private async Task IndexSolutionAsync(ITaskHandler handler)
+{
+    var data = default(TaskProgressData);
+    data.CanBeCanceled = true;
+    data.ProgressText = "Starting...";
+
+    var files = await GetAllFilesAsync();
+    int current = 0;
+
+    foreach (var file in files)
+    {
+        if (handler.UserCancellation.IsCancellationRequested)
+        {
+            break;
+        }
+
+        current++;
+        data.ProgressText = $"Indexing {Path.GetFileName(file)} ({current}/{files.Count})";
+        data.PercentComplete = (int)((double)current / files.Count * 100);
+        handler.Progress.Report(data);
+
+        await IndexFileAsync(file);
+    }
+}
+```
+
+The Task Status Center appears in the lower-left corner of VS and doesn't block the UI.
+
+## IProgress&lt;T&gt; Pattern
+
+Use the standard .NET progress pattern for cleaner code:
+
+```csharp
+public async Task ProcessAsync(IProgress<ProgressData> progress, CancellationToken cancellationToken)
+{
+    var files = await GetFilesAsync();
+
+    for (int i = 0; i < files.Count; i++)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        progress?.Report(new ProgressData
+        {
+            Message = $"Processing {files[i].Name}",
+            PercentComplete = (int)((double)i / files.Count * 100)
+        });
+
+        await ProcessFileAsync(files[i], cancellationToken);
+    }
+}
+
+public class ProgressData
+{
+    public string Message { get; set; }
+    public int PercentComplete { get; set; }
+}
+
+// Usage with VS progress
+var progressHandler = new Progress<ProgressData>(data =>
+{
+    ThreadHelper.JoinableTaskFactory.Run(async () =>
+    {
+        await VS.StatusBar.ShowProgressAsync(data.Message, data.PercentComplete, 100);
+    });
+});
+
+await ProcessAsync(progressHandler, cancellationToken);
+```
+
+## Complete Example
+
+A file processor with dialog, progress, and cancellation:
+
+```csharp
+public class FileProcessor
+{
+    public async Task ProcessFilesAsync(IEnumerable<string> files)
+    {
+        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+        var fileList = files.ToList();
+        if (fileList.Count == 0) return;
+
+        // Use status bar for quick operations
+        if (fileList.Count < 5)
+        {
+            await ProcessWithStatusBarAsync(fileList);
+            return;
+        }
+
+        // Use dialog for longer operations
+        await ProcessWithDialogAsync(fileList);
+    }
+
+    private async Task ProcessWithStatusBarAsync(List<string> files)
+    {
+        try
+        {
+            await VS.StatusBar.StartAnimationAsync(StatusAnimation.General);
+
+            for (int i = 0; i < files.Count; i++)
+            {
+                await VS.StatusBar.ShowProgressAsync(
+                    $"Processing {Path.GetFileName(files[i])}...",
+                    i + 1,
+                    files.Count);
+
+                await ProcessSingleFileAsync(files[i]);
+            }
+
+            await VS.StatusBar.ShowMessageAsync("Processing complete!");
+        }
+        finally
+        {
+            await VS.StatusBar.EndAnimationAsync(StatusAnimation.General);
+            await Task.Delay(2000);
+            await VS.StatusBar.ClearAsync();
+        }
+    }
+
+    private async Task ProcessWithDialogAsync(List<string> files)
+    {
+        var dialogFactory = await VS.Services.GetThreadedWaitDialogAsync();
+        dialogFactory.CreateInstance(out var dialog);
+
+        dialog.StartWaitDialog(
+            "File Processor",
+            "Preparing...",
+            null, null,
+            "Processing files...",
+            iDelayToShowDialog: 1,
+            fIsCancelable: true,
+            fShowMarqueeProgress: false);
+
+        try
+        {
+            for (int i = 0; i < files.Count; i++)
+            {
+                dialog.HasCanceled(out bool canceled);
+                if (canceled)
+                {
+                    await VS.StatusBar.ShowMessageAsync("Operation canceled");
+                    return;
+                }
+
+                dialog.UpdateProgress(
+                    $"Processing {Path.GetFileName(files[i])}",
+                    $"File {i + 1} of {files.Count}",
+                    $"Processing: {files[i]}",
+                    i + 1,
+                    files.Count,
+                    fDisableCancel: false,
+                    pfCanceled: out _);
+
+                await ProcessSingleFileAsync(files[i]);
+            }
+
+            await VS.StatusBar.ShowMessageAsync($"Processed {files.Count} files successfully");
+        }
+        finally
+        {
+            dialog.EndWaitDialog(out _);
+        }
+    }
+
+    private async Task ProcessSingleFileAsync(string file)
+    {
+        // Your processing logic
+        await Task.Delay(100); // Simulate work
+    }
+}
+```
+
+## Best Practices
+
+1. **Choose the right mechanism**:
+   - Status bar: Quick operations (< 5 seconds)
+   - Wait dialog: UI-blocking operations the user initiated
+   - Task Status Center: Background operations
+
+2. **Always support cancellation** - Long operations should be cancelable
+
+3. **Delay showing dialogs** - Use `iDelayToShowDialog` to avoid flashing for quick operations
+
+4. **Update frequently** - Progress should feel responsive (update every 100-500ms)
+
+5. **Provide meaningful text** - Show what's happening, not just percentages
+
+6. **Clean up** - Always clear/end progress indicators, even on errors
+
+<Callout type="warning">
+Never block the UI thread without showing a wait dialog. Users will think VS has frozen.
+</Callout>
+
+<Callout type="tip">
+For operations under 2 seconds, consider not showing any progress at all. A brief pause often feels faster than seeing progress UI appear and disappear.
+</Callout>
+
+## See Also
+
+- [Async Services](async-services) - Async patterns in VS extensions
+- [Status Bar](status-bar) - Status bar text and icons
+- [Output Window](output-window) - Logging progress details
