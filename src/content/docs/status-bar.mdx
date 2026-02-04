@@ -1,0 +1,361 @@
+---
+title: Status Bar
+description: Learn how to display messages, progress, and animations in the Visual Studio status bar.
+category: fundamentals
+order: 12
+---
+
+import Callout from '@components/Callout.astro';
+
+The status bar at the bottom of Visual Studio displays quick feedback to users: text messages, progress indicators, and animated icons. It's ideal for brief, transient information.
+
+## Quick Start with Community Toolkit
+
+```csharp
+// Show a message
+await VS.StatusBar.ShowMessageAsync("Ready");
+
+// Show progress
+await VS.StatusBar.ShowProgressAsync("Processing...", 1, 10);
+
+// Clear the status bar
+await VS.StatusBar.ClearAsync();
+```
+
+## Displaying Text
+
+### Simple Messages
+
+```csharp
+// Show a message
+await VS.StatusBar.ShowMessageAsync("Build succeeded");
+
+// Clear after a delay
+await VS.StatusBar.ShowMessageAsync("File saved");
+await Task.Delay(3000);
+await VS.StatusBar.ClearAsync();
+```
+
+### Traditional Approach
+
+```csharp
+await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+var statusBar = (IVsStatusbar)await VS.Services.GetStatusBarAsync();
+
+// Check if status bar is frozen (owned by another component)
+statusBar.IsFrozen(out int frozen);
+if (frozen == 0)
+{
+    statusBar.SetText("My message");
+}
+
+// Clear
+statusBar.Clear();
+```
+
+## Progress Indicator
+
+### Determinate Progress
+
+Show progress with known total:
+
+```csharp
+// With Toolkit
+for (int i = 1; i <= 10; i++)
+{
+    await VS.StatusBar.ShowProgressAsync($"Processing file {i}...", i, 10);
+    await Task.Delay(200);
+}
+await VS.StatusBar.ClearAsync();
+
+// Traditional
+uint cookie = 0;
+statusBar.Progress(ref cookie, 1, "Processing...", 5, 10);  // 5 of 10
+statusBar.Progress(ref cookie, 0, "", 0, 0);  // Clear
+```
+
+### Indeterminate Progress
+
+For unknown duration operations:
+
+```csharp
+// Start animation
+await VS.StatusBar.StartAnimationAsync(StatusAnimation.Build);
+
+// Do work...
+await DoWorkAsync();
+
+// Stop animation
+await VS.StatusBar.EndAnimationAsync(StatusAnimation.Build);
+```
+
+## Animations
+
+Visual Studio provides several built-in animations:
+
+```csharp
+// Available animations
+StatusAnimation.General   // Generic pulsing
+StatusAnimation.Build     // Build in progress
+StatusAnimation.Save      // Save operation
+StatusAnimation.Deploy    // Deployment
+StatusAnimation.Sync      // Synchronization
+StatusAnimation.Find      // Search operation
+StatusAnimation.Print     // Print operation
+```
+
+### Traditional Animation Control
+
+```csharp
+await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+var statusBar = (IVsStatusbar)await VS.Services.GetStatusBarAsync();
+
+// Get animation object
+object icon = (short)Constants.SBAI_Build; // Build animation
+
+// Start
+statusBar.Animation(1, ref icon);
+
+// Stop
+statusBar.Animation(0, ref icon);
+```
+
+### Animation Constants
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `SBAI_General` | 0 | General animation |
+| `SBAI_Build` | 2 | Building |
+| `SBAI_Save` | 3 | Saving |
+| `SBAI_Deploy` | 4 | Deploying |
+| `SBAI_Sync` | 5 | Syncing |
+| `SBAI_Find` | 6 | Finding |
+| `SBAI_Print` | 7 | Printing |
+
+## Designer/Mode Indicator
+
+Show the current mode in the status bar:
+
+```csharp
+var statusBar = (IVsStatusbar)await VS.Services.GetStatusBarAsync();
+
+// Set mode text (appears on the right side)
+statusBar.SetInsMode("OVR");  // Overwrite mode indicator
+statusBar.SetLineColChar(10, 25, 500);  // Line 10, Col 25, Char 500
+```
+
+## Feedback Region
+
+The status bar has a feedback region that can host custom UI:
+
+```csharp
+// This is rarely used - most extensions use text/progress only
+statusBar.GetFeedbackRegion(out var feedbackRegion);
+```
+
+## Complete Examples
+
+### File Processing with Progress
+
+```csharp
+public async Task ProcessFilesAsync(IEnumerable<string> files)
+{
+    var fileList = files.ToList();
+    if (!fileList.Any()) return;
+
+    try
+    {
+        await VS.StatusBar.StartAnimationAsync(StatusAnimation.General);
+
+        for (int i = 0; i < fileList.Count; i++)
+        {
+            var fileName = Path.GetFileName(fileList[i]);
+            await VS.StatusBar.ShowProgressAsync(
+                $"Processing {fileName}...",
+                i + 1,
+                fileList.Count);
+
+            await ProcessFileAsync(fileList[i]);
+        }
+
+        await VS.StatusBar.ShowMessageAsync($"Processed {fileList.Count} files successfully");
+    }
+    catch (Exception ex)
+    {
+        await VS.StatusBar.ShowMessageAsync($"Error: {ex.Message}");
+    }
+    finally
+    {
+        await VS.StatusBar.EndAnimationAsync(StatusAnimation.General);
+
+        // Clear after delay
+        await Task.Delay(5000);
+        await VS.StatusBar.ClearAsync();
+    }
+}
+```
+
+### Search Operation
+
+```csharp
+public async Task<List<string>> SearchAsync(string query, CancellationToken ct)
+{
+    var results = new List<string>();
+
+    try
+    {
+        await VS.StatusBar.StartAnimationAsync(StatusAnimation.Find);
+        await VS.StatusBar.ShowMessageAsync($"Searching for '{query}'...");
+
+        results = await PerformSearchAsync(query, ct);
+
+        await VS.StatusBar.ShowMessageAsync($"Found {results.Count} results");
+    }
+    catch (OperationCanceledException)
+    {
+        await VS.StatusBar.ShowMessageAsync("Search canceled");
+    }
+    finally
+    {
+        await VS.StatusBar.EndAnimationAsync(StatusAnimation.Find);
+
+        await Task.Delay(3000);
+        await VS.StatusBar.ClearAsync();
+    }
+
+    return results;
+}
+```
+
+### Status Bar Service Class
+
+A reusable wrapper for status bar operations:
+
+```csharp
+public class StatusBarService : IDisposable
+{
+    private bool _animating;
+    private StatusAnimation _currentAnimation;
+    private CancellationTokenSource _clearCts;
+
+    public async Task ShowMessageAsync(string message, int clearAfterMs = 0)
+    {
+        _clearCts?.Cancel();
+        await VS.StatusBar.ShowMessageAsync(message);
+
+        if (clearAfterMs > 0)
+        {
+            _clearCts = new CancellationTokenSource();
+            _ = ClearAfterDelayAsync(clearAfterMs, _clearCts.Token);
+        }
+    }
+
+    public async Task ShowProgressAsync(string message, int current, int total)
+    {
+        _clearCts?.Cancel();
+        await VS.StatusBar.ShowProgressAsync(message, current, total);
+    }
+
+    public async Task StartAnimationAsync(StatusAnimation animation)
+    {
+        if (_animating)
+        {
+            await VS.StatusBar.EndAnimationAsync(_currentAnimation);
+        }
+
+        _currentAnimation = animation;
+        _animating = true;
+        await VS.StatusBar.StartAnimationAsync(animation);
+    }
+
+    public async Task StopAnimationAsync()
+    {
+        if (_animating)
+        {
+            await VS.StatusBar.EndAnimationAsync(_currentAnimation);
+            _animating = false;
+        }
+    }
+
+    public async Task ClearAsync()
+    {
+        _clearCts?.Cancel();
+        await StopAnimationAsync();
+        await VS.StatusBar.ClearAsync();
+    }
+
+    private async Task ClearAfterDelayAsync(int delayMs, CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(delayMs, ct);
+            await VS.StatusBar.ClearAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            // Ignore - clear was canceled
+        }
+    }
+
+    public void Dispose()
+    {
+        _clearCts?.Cancel();
+        _clearCts?.Dispose();
+    }
+}
+```
+
+## Frozen Status Bar
+
+Other VS components can "freeze" the status bar to prevent changes:
+
+```csharp
+var statusBar = (IVsStatusbar)await VS.Services.GetStatusBarAsync();
+
+statusBar.IsFrozen(out int frozen);
+if (frozen != 0)
+{
+    // Status bar is frozen by another component
+    // Your message won't be displayed
+    return;
+}
+
+// Safe to update
+statusBar.SetText("My message");
+```
+
+<Callout type="tip">
+The Community Toolkit methods handle frozen state automatically. Use the traditional approach only when you need fine-grained control.
+</Callout>
+
+## Best Practices
+
+1. **Keep messages brief** - Status bar space is limited
+2. **Clear after a delay** - Don't leave stale messages
+3. **Use appropriate animations** - Match the operation type
+4. **Don't overwrite important messages** - Check if frozen
+5. **Provide progress for long operations** - Users should know something is happening
+6. **Use consistent formatting** - "Verb + object" pattern works well
+
+<Callout type="warning">
+The status bar is shared across all extensions and VS features. Don't assume your message will persist - it may be overwritten at any time.
+</Callout>
+
+## Status Bar vs Other UI
+
+| Information Type | Recommended UI |
+|------------------|----------------|
+| Quick feedback (2-5 seconds) | Status bar message |
+| Operation progress | Status bar progress |
+| Important notification | InfoBar |
+| Errors needing action | Error List |
+| Detailed logs | Output Window |
+| Blocking operation | Wait Dialog |
+
+## See Also
+
+- [Progress Indication](progress-indication) - Detailed progress feedback
+- [InfoBars](infobars) - Non-modal notifications
+- [Output Window](output-window) - Detailed logging
