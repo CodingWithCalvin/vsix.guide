@@ -1,0 +1,371 @@
+---
+title: Context Menus
+description: Learn how to add commands to Visual Studio context menus and their GUIDs.
+category: fundamentals
+order: 13
+---
+
+import Callout from '@components/Callout.astro';
+
+Context menus (right-click menus) appear throughout Visual Studio. Your extension can add commands to existing context menus or create custom ones.
+
+## Quick Start with Community Toolkit
+
+Add a command to Solution Explorer's context menu:
+
+```csharp
+[Command(PackageIds.MyCommand)]
+internal sealed class MyCommand : BaseCommand<MyCommand>
+{
+    protected override async Task ExecuteAsync(OleMenuCmdEventArgs e)
+    {
+        await VS.MessageBox.ShowAsync("Command executed!");
+    }
+}
+```
+
+In your `.vsct` file:
+
+```xml
+<Button guid="guidMyPackageCmdSet" id="MyCommand" priority="0x0100" type="Button">
+  <Parent guid="guidSHLMainMenu" id="IDG_VS_CTXT_SOLUTION_BUILD"/>
+  <Strings>
+    <ButtonText>My Command</ButtonText>
+  </Strings>
+</Button>
+```
+
+## Context Menu GUIDs
+
+### Solution Explorer
+
+| Menu | GUID | Group ID | Description |
+|------|------|----------|-------------|
+| Solution node | `guidSHLMainMenu` | `IDG_VS_CTXT_SOLUTION_BUILD` | Solution context menu |
+| Project node | `guidSHLMainMenu` | `IDG_VS_CTXT_PROJECT_BUILD` | Project context menu |
+| Folder node | `guidSHLMainMenu` | `IDG_VS_CTXT_FOLDER_ADD` | Folder context menu |
+| Item/File node | `guidSHLMainMenu` | `IDG_VS_CTXT_ITEM_OPEN` | File context menu |
+| References node | `guidSHLMainMenu` | `IDG_VS_CTXT_REFROOT_ADD` | References context menu |
+| Reference item | `guidSHLMainMenu` | `IDG_VS_CTXT_REFERENCE` | Single reference |
+
+### Code Editor
+
+| Menu | GUID | Group ID | Description |
+|------|------|----------|-------------|
+| Editor context | `guidSHLMainMenu` | `IDG_VS_CODEWIN_NAVIGATETOLOCATION` | Code editor right-click |
+| Editor margin | `guidSHLMainMenu` | `IDG_VS_EDITOR_OUTLINING_CMDS` | Left margin |
+
+### Tool Windows
+
+| Menu | GUID/Group | Description |
+|------|------------|-------------|
+| Error List | `CMDSETID_StandardCommandSet2K` / `IDG_VS_ERRORLIST_ERRORGROUP` | Error List items |
+| Output Window | `guidSHLMainMenu` / `IDG_VS_OUTWINDOW_OUTPUTCMDS` | Output window |
+| Task List | `guidSHLMainMenu` / `IDG_VS_TASKLIST_CLIENTGROUP` | Task List items |
+
+## Adding Commands to Context Menus
+
+### VSCT Structure
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<CommandTable xmlns="http://schemas.microsoft.com/VisualStudio/2005-10-18/CommandTable">
+
+  <Extern href="stdidcmd.h"/>
+  <Extern href="vsshlids.h"/>
+
+  <Commands package="guidMyPackage">
+
+    <!-- Define a group to hold your commands -->
+    <Groups>
+      <Group guid="guidMyPackageCmdSet" id="MyMenuGroup" priority="0x0600">
+        <!-- Parent this group to Solution Explorer's solution context menu -->
+        <Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_SOLNNODE"/>
+      </Group>
+    </Groups>
+
+    <Buttons>
+      <Button guid="guidMyPackageCmdSet" id="MyCommandId" priority="0x0100" type="Button">
+        <Parent guid="guidMyPackageCmdSet" id="MyMenuGroup"/>
+        <Icon guid="guidImages" id="myIcon"/>
+        <Strings>
+          <ButtonText>My Context Command</ButtonText>
+        </Strings>
+      </Button>
+    </Buttons>
+
+  </Commands>
+
+  <Symbols>
+    <GuidSymbol name="guidMyPackage" value="{your-package-guid}"/>
+    <GuidSymbol name="guidMyPackageCmdSet" value="{your-cmdset-guid}">
+      <IDSymbol name="MyMenuGroup" value="0x1020"/>
+      <IDSymbol name="MyCommandId" value="0x0100"/>
+    </GuidSymbol>
+  </Symbols>
+
+</CommandTable>
+```
+
+### Common Context Menu IDs
+
+```xml
+<!-- Solution Explorer -->
+<Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_SOLNNODE"/>      <!-- Solution -->
+<Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_PROJNODE"/>      <!-- Project -->
+<Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_FOLDERNODE"/>    <!-- Folder -->
+<Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_ITEMNODE"/>      <!-- File/Item -->
+<Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_REFERENCEROOT"/> <!-- References -->
+<Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_REFERENCE"/>     <!-- Reference -->
+<Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_WEBREFFOLDER"/>  <!-- Web References -->
+
+<!-- Code Editor -->
+<Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_CODEWIN"/>       <!-- Editor -->
+
+<!-- Class View -->
+<Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_CV_PROJECT"/>    <!-- CV Project -->
+<Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_CV_ITEM"/>       <!-- CV Item -->
+
+<!-- Other -->
+<Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_NOCOMMANDS"/>    <!-- No selection -->
+```
+
+## Multiple Context Menus
+
+Add your command to multiple locations using `CommandPlacements`:
+
+```xml
+<CommandPlacements>
+  <!-- Add to Solution context menu -->
+  <CommandPlacement guid="guidMyPackageCmdSet" id="MyCommandId" priority="0x0100">
+    <Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_SOLNNODE"/>
+  </CommandPlacement>
+
+  <!-- Also add to Project context menu -->
+  <CommandPlacement guid="guidMyPackageCmdSet" id="MyCommandId" priority="0x0100">
+    <Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_PROJNODE"/>
+  </CommandPlacement>
+
+  <!-- And File context menu -->
+  <CommandPlacement guid="guidMyPackageCmdSet" id="MyCommandId" priority="0x0100">
+    <Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_ITEMNODE"/>
+  </CommandPlacement>
+</CommandPlacements>
+```
+
+## Dynamic Visibility
+
+Control when your command appears:
+
+### With Community Toolkit
+
+```csharp
+[Command(PackageIds.MyCommand)]
+internal sealed class MyCommand : BaseCommand<MyCommand>
+{
+    protected override void BeforeQueryStatus(EventArgs e)
+    {
+        // Only show for .cs files
+        var item = VS.Solutions.GetActiveItemAsync().Result;
+        Command.Visible = item?.FullPath?.EndsWith(".cs") == true;
+    }
+
+    protected override async Task ExecuteAsync(OleMenuCmdEventArgs e)
+    {
+        // Command implementation
+    }
+}
+```
+
+### Traditional OleMenuCommand
+
+```csharp
+private void InitializeCommand()
+{
+    var commandId = new CommandID(PackageGuids.guidMyPackageCmdSet, PackageIds.MyCommand);
+    var command = new OleMenuCommand(Execute, commandId);
+    command.BeforeQueryStatus += OnBeforeQueryStatus;
+
+    var commandService = (IMenuCommandService)GetService(typeof(IMenuCommandService));
+    commandService.AddCommand(command);
+}
+
+private void OnBeforeQueryStatus(object sender, EventArgs e)
+{
+    ThreadHelper.ThrowIfNotOnUIThread();
+
+    var command = (OleMenuCommand)sender;
+
+    // Get selected items in Solution Explorer
+    var monitorSelection = (IVsMonitorSelection)GetService(typeof(SVsShellMonitorSelection));
+    monitorSelection.GetCurrentSelection(
+        out IntPtr hierarchyPtr,
+        out uint itemId,
+        out IVsMultiItemSelect multiSelect,
+        out IntPtr containerPtr);
+
+    // Show only for single selection
+    command.Visible = multiSelect == null && hierarchyPtr != IntPtr.Zero;
+}
+```
+
+### UI Context Visibility
+
+Show commands only in specific contexts:
+
+```xml
+<VisibilityConstraints>
+  <VisibilityItem guid="guidMyPackageCmdSet" id="MyCommandId"
+                  context="UICONTEXT_SolutionHasSingleProject"/>
+</VisibilityConstraints>
+```
+
+Common UI contexts:
+
+| Context | When Visible |
+|---------|--------------|
+| `UICONTEXT_SolutionExists` | A solution is open |
+| `UICONTEXT_SolutionHasSingleProject` | Solution has exactly one project |
+| `UICONTEXT_SolutionHasMultipleProjects` | Solution has multiple projects |
+| `UICONTEXT_SolutionBuilding` | Build in progress |
+| `UICONTEXT_Debugging` | Debug session active |
+| `UICONTEXT_DesignMode` | Not debugging |
+| `UICONTEXT_CodeWindow` | Code editor has focus |
+| `UICONTEXT_NoSolution` | No solution open |
+
+## Submenus
+
+Create a submenu in a context menu:
+
+```xml
+<Menus>
+  <Menu guid="guidMyPackageCmdSet" id="MySubmenu" priority="0x0100" type="Menu">
+    <Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_ITEMNODE"/>
+    <Strings>
+      <ButtonText>My Extension</ButtonText>
+    </Strings>
+  </Menu>
+</Menus>
+
+<Groups>
+  <Group guid="guidMyPackageCmdSet" id="MySubmenuGroup" priority="0x0100">
+    <Parent guid="guidMyPackageCmdSet" id="MySubmenu"/>
+  </Group>
+</Groups>
+
+<Buttons>
+  <Button guid="guidMyPackageCmdSet" id="SubCommand1" priority="0x0100" type="Button">
+    <Parent guid="guidMyPackageCmdSet" id="MySubmenuGroup"/>
+    <Strings>
+      <ButtonText>Sub Command 1</ButtonText>
+    </Strings>
+  </Button>
+
+  <Button guid="guidMyPackageCmdSet" id="SubCommand2" priority="0x0200" type="Button">
+    <Parent guid="guidMyPackageCmdSet" id="MySubmenuGroup"/>
+    <Strings>
+      <ButtonText>Sub Command 2</ButtonText>
+    </Strings>
+  </Button>
+</Buttons>
+```
+
+## Complete Example
+
+A context menu command that processes selected files:
+
+```csharp
+[Command(PackageIds.ProcessFilesCommand)]
+internal sealed class ProcessFilesCommand : BaseCommand<ProcessFilesCommand>
+{
+    protected override void BeforeQueryStatus(EventArgs e)
+    {
+        ThreadHelper.JoinableTaskFactory.Run(async () =>
+        {
+            var items = await VS.Solutions.GetActiveItemsAsync();
+            var hasFiles = items.Any(i => !string.IsNullOrEmpty(i.FullPath) &&
+                                          File.Exists(i.FullPath));
+            Command.Visible = hasFiles;
+            Command.Enabled = hasFiles;
+        });
+    }
+
+    protected override async Task ExecuteAsync(OleMenuCmdEventArgs e)
+    {
+        var items = await VS.Solutions.GetActiveItemsAsync();
+        var files = items
+            .Where(i => File.Exists(i.FullPath))
+            .Select(i => i.FullPath)
+            .ToList();
+
+        if (!files.Any())
+        {
+            await VS.MessageBox.ShowWarningAsync("No files selected");
+            return;
+        }
+
+        await VS.StatusBar.ShowProgressAsync("Processing files...", 0, files.Count);
+
+        for (int i = 0; i < files.Count; i++)
+        {
+            await ProcessFileAsync(files[i]);
+            await VS.StatusBar.ShowProgressAsync(
+                $"Processing {Path.GetFileName(files[i])}...",
+                i + 1,
+                files.Count);
+        }
+
+        await VS.StatusBar.ShowMessageAsync($"Processed {files.Count} files");
+    }
+
+    private async Task ProcessFileAsync(string filePath)
+    {
+        await Task.Delay(100); // Your processing logic
+    }
+}
+```
+
+VSCT for the command:
+
+```xml
+<Groups>
+  <Group guid="guidMyPackageCmdSet" id="SolutionExplorerGroup" priority="0x0600">
+    <Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_ITEMNODE"/>
+  </Group>
+</Groups>
+
+<Buttons>
+  <Button guid="guidMyPackageCmdSet" id="ProcessFilesCommand" priority="0x0100" type="Button">
+    <Parent guid="guidMyPackageCmdSet" id="SolutionExplorerGroup"/>
+    <Icon guid="ImageCatalogGuid" id="Process"/>
+    <CommandFlag>IconIsMoniker</CommandFlag>
+    <CommandFlag>DynamicVisibility</CommandFlag>
+    <Strings>
+      <ButtonText>Process Files</ButtonText>
+    </Strings>
+  </Button>
+</Buttons>
+```
+
+## Best Practices
+
+1. **Use groups** - Don't parent directly to menus; create a group first
+2. **Set priorities** - Control order with priority values (lower = higher in menu)
+3. **Dynamic visibility** - Hide commands that don't apply to the selection
+4. **Use submenus** - Group related commands under one submenu to reduce clutter
+5. **Consistent naming** - Match VS naming conventions
+6. **Add icons** - Commands with icons are easier to find
+
+<Callout type="tip">
+Use the `DynamicVisibility` command flag in VSCT when implementing `BeforeQueryStatus` to control visibility programmatically.
+</Callout>
+
+<Callout type="warning">
+Context menu commands should execute quickly. For long operations, show a progress indicator and consider running asynchronously.
+</Callout>
+
+## See Also
+
+- [Commands](commands) - Command basics and VSCT
+- [Dynamic Menus](dynamic-menus) - Runtime-generated menu items
+- [Tool Window GUIDs](tool-window-guids) - Related GUIDs reference
