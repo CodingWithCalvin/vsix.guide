@@ -1,0 +1,229 @@
+---
+title: Tool Window GUIDs
+description: Reference for built-in Visual Studio tool window GUIDs.
+category: reference
+order: 7
+---
+
+import Callout from '@components/Callout.astro';
+
+This reference documents the GUIDs for Visual Studio's built-in tool windows. Use these GUIDs to dock your custom tool windows alongside existing ones or to programmatically interact with them.
+
+## Core Tool Windows
+
+The most commonly used tool windows in Visual Studio.
+
+| Tool Window | GUID | Constant |
+|-------------|------|----------|
+| Solution Explorer | `{3AE79031-E1BC-11D0-8F78-00A0C9110057}` | `EnvDTE.Constants.vsWindowKindSolutionExplorer` |
+| Properties | `{EEFA5220-E298-11D0-8F78-00A0C9110057}` | `EnvDTE.Constants.vsWindowKindProperties` |
+| Error List | `{D78612C7-9962-4B83-95D9-268046DAD23A}` | — |
+| Task List | `{4A9B7E51-AA16-11D0-A8C5-00A0C921A4D2}` | `EnvDTE.Constants.vsWindowKindTaskList` |
+| Output | `{34E76E81-EE4A-11D0-AE2E-00A0C90FFFC3}` | `EnvDTE.Constants.vsWindowKindOutput` |
+| Toolbox | `{B1E99781-AB81-11D0-B683-00AA00A3EE26}` | `EnvDTE.Constants.vsWindowKindToolbox` |
+| Server Explorer | `{74946827-37A0-11D2-A273-00C04F8EF4FF}` | `EnvDTE.Constants.vsWindowKindServerExplorer` |
+| Document Outline | `{25F7E850-FFA1-11D0-B63F-00A0C922E851}` | `EnvDTE.Constants.vsWindowKindDocumentOutline` |
+| Class View | `{C9C0AE26-AA77-11D2-B3F0-0000F87570EE}` | `EnvDTE.Constants.vsWindowKindClassView` |
+| Object Browser | `{269A02DC-6AF8-11D3-BDC4-00C04F688E50}` | `EnvDTE.Constants.vsWindowKindObjectBrowser` |
+| Command Window | `{28836128-FC2C-11D2-A433-00C04F72D18A}` | `EnvDTE.Constants.vsWindowKindCommandWindow` |
+| Bookmark Window | `{A0C5197D-0AC7-4B63-97CD-8872A789D233}` | — |
+| Code Definition | `{588470CC-84F8-4A57-9AC4-86BCA0625FF4}` | — |
+
+## Find Windows
+
+| Tool Window | GUID |
+|-------------|------|
+| Find Results 1 | `{0F887920-C2B6-11D2-9375-0080C747D9A0}` |
+| Find Results 2 | `{0F887921-C2B6-11D2-9375-0080C747D9A0}` |
+| Find Symbol Results | `{68487888-204A-11D3-87EB-00C04F7971A5}` |
+| Find All References | `{A80FEBB4-E7E0-4147-B476-21AAF2453969}` |
+| Find Results (New) | `{004BE353-6879-467C-9D1E-9AC23CDF6D49}` |
+
+## Debugger Windows
+
+Windows available during debugging sessions.
+
+| Tool Window | GUID | Notes |
+|-------------|------|-------|
+| Watch 1 | `{90243340-BD7A-11D0-93EF-00A0C90F2734}` | Multi-instance window |
+| Watch 2 | Instance 2 of above | Use `FindToolWindowAsync(type, 1, ...)` |
+| Watch 3 | Instance 3 of above | Use `FindToolWindowAsync(type, 2, ...)` |
+| Watch 4 | Instance 4 of above | Use `FindToolWindowAsync(type, 3, ...)` |
+| Autos | `{F2E84780-2AF1-11D1-A7FA-00A0C9110051}` | Auto-populated variables |
+| Locals | `{4A18F9D0-B838-11D0-93EB-00A0C90F2734}` | Local variables |
+| Call Stack | `{0504FF91-9D61-11D0-A794-00A0C9110051}` | Stack trace |
+| Breakpoints | `{BE4D7042-BA3F-11D2-840E-00C04F9902C1}` | Breakpoint management |
+| Exception Settings | `{605322A2-17AE-43F4-B60F-766556E46C87}` | Exception configuration |
+| Immediate | `{CF577B8C-4134-11D2-83E5-00C04F9902C1}` | Immediate execution |
+| Threads | `{E62CE6A0-B439-11D0-A79D-00A0C9110051}` | Thread list |
+| Modules | `{37ABA9BE-445A-11D3-9949-00C04F68FD0A}` | Loaded modules |
+| Processes | `{99B8FA2F-AB90-4F57-9C32-949F146F1914}` | Process list |
+| Disassembly | `{CF2DDC32-8CAD-11D2-9302-005345000000}` | Assembly view |
+| Registers | `{51C76317-9037-4CF2-A20A-6206FD30B4A1}` | CPU registers |
+| Memory 1-4 | `{350F9856-A72B-11D2-8AD0-00C04F79E479}` | Multi-instance window |
+| Parallel Watch 1 | `{2456BD12-ECF7-4988-A4A6-67D49173F564}` | Parallel debugging |
+| Parallel Watch 2 | `{2456BD12-ECF7-4988-A4A6-67D49173F565}` | Parallel debugging |
+| Parallel Stacks | `{B9A151CE-EF7C-4FE1-A6AA-4777E6E518F3}` | Parallel call stacks |
+| Parallel Tasks | `{0CF2BFF9-6057-4D23-A51C-A4825B06BFFE}` | Task parallel view |
+| GPU Threads | `{CB170882-2B60-46B5-9D06-A57667186C95}` | GPU debugging |
+
+## Team Explorer / Git Windows
+
+| Tool Window | GUID |
+|-------------|------|
+| Team Explorer | `{131369F2-062D-44A2-8671-91FF31EFB4F4}` |
+| Team Explorer (Undockable) | `{13143D73-808B-4A2F-BEBB-CCBE9C93FE37}` |
+| Git Changes | `{1C64B9C2-E352-428E-A56D-0ACE190B99A6}` |
+| Git Repository | `{E3FC08BE-3924-11DB-8AF6-B622A1EF5492}` |
+| Git History | `{116D2292-E37D-41CD-A077-EBACAC4C8CC4}` |
+| Pull Requests | `{75188D03-9892-4AE2-ABF1-207126247CE5}` |
+| Build | `{E77209BA-064A-4625-B8CE-DFD1D7967CD1}` |
+
+## Test Windows
+
+| Tool Window | GUID |
+|-------------|------|
+| Test Explorer | `{E1B7D1F8-9B3C-49B1-8F4F-BFC63A88835D}` |
+| Test Results | `{45D2F183-C286-49E2-862C-CC3E7DF77543}` |
+| Code Coverage Results | `{905DA7D1-18FD-4A46-8D0F-A5FF58ADA9DE}` |
+| Live Unit Testing | `{AA9A73A5-B2BF-400B-B57C-58F166FF1C56}` |
+| Test Runs | `{D2F6510A-150A-4F3F-9D7C-8E38622D26F7}` |
+
+## Designer Windows
+
+| Tool Window | GUID |
+|-------------|------|
+| Data Sources | `{873151D0-CF2E-48CC-B4BF-AD0394F6A3C3}` |
+| XAML Designer | `{3DB98CE8-14F0-4B05-9B6A-B9DBE8FA94AB}` |
+| XAML Binding Failures | `{A2EAF38F-A0AD-4503-91F8-5F004A69A040}` |
+| Live Visual Tree | `{31FC2115-5126-4A87-B2F7-77EAAB65048B}` |
+| Live Property Explorer | `{DB388BF8-D8AB-4D02-9B1C-0AD37B3DB1B0}` |
+| Resource Editor | `{5B6781C0-E99D-11D0-9954-00A0C91BC8E5}` |
+| Asset Editor | `{2D4D7B63-2712-49A6-A309-3FF689DE5696}` |
+
+## Diagnostics Windows
+
+| Tool Window | GUID |
+|-------------|------|
+| Diagnostic Tools | `{6D4078D1-5951-4ED1-AC0E-0A8099C1CCE5}` |
+| CPU Usage | `{34C7837F-3B3A-449C-BDF0-BDAD86CBAF4A}` |
+| Memory Usage | `{9D2016E5-735E-4D98-A9AF-FFF43B64A526}` |
+| Performance Profiler | `{B9F91511-5CA5-40EC-9726-F3E3A7E534E2}` |
+| Events | `{8D263989-FF4B-4A78-90C8-B2BA3FA69311}` |
+
+## Web / Azure Windows
+
+| Tool Window | GUID |
+|-------------|------|
+| Browser Link | `{7F075F9F-1E1A-4EE8-9CE8-B8451FB61EC8}` |
+| Web Publish Activity | `{A2C8B774-0984-495F-8428-E6140B2D66E0}` |
+| Task Runner Explorer | `{4A8466FE-5A05-4F81-AD45-7D7C1316817E}` |
+| Connected Services | `{94E70A98-CA07-351C-8FEE-37A4C8C014DD}` |
+| Application Insights | `{682E7D2A-5C60-4F00-BE98-E787FF511646}` |
+
+## Terminal & Package Manager
+
+| Tool Window | GUID |
+|-------------|------|
+| Terminal | `{D212F56B-C48A-434C-A121-1C5D80B59B9F}` |
+| Developer PowerShell | `{E8034F19-AB72-4F06-83FD-F6832B41AA63}` |
+| NuGet Package Manager | `{0AD07096-BBA9-4900-A651-0598D26F6D24}` |
+| Extension Manager | `{AA2115A1-9712-457B-9047-DBB71CA2CDD2}` |
+
+## SQL / Database Windows
+
+| Tool Window | GUID |
+|-------------|------|
+| SQL Server Object Explorer | `{FBCAE063-E2C0-4AB1-A516-996EA3DAFB72}` |
+| Data Tools Operations | `{0038D243-39E6-4004-8532-13C6802D97B2}` |
+| T-SQL Editor Results | `{007A3A6B-B5B2-454D-A2BD-CF929F989BE2}` |
+| XSD Designer | `{DD1DDD20-D59B-11DA-A94D-0800200C9A66}` |
+| Entity Data Model | `{A34B1C5D-6D37-4A0C-A8B0-99F8E8158B48}` |
+| Model Browser | `{CDBDEE54-B399-484B-B763-DB2C3393D646}` |
+
+## Graphics Debugging
+
+| Tool Window | GUID |
+|-------------|------|
+| Graphics Pixel History | `{73814874-106B-45C1-803E-DD7D4AB05021}` |
+| Graphics Object Table | `{DC7393B5-7361-4433-8F53-0962F57362D7}` |
+| Graphics Pipeline Stages | `{572EEADC-3D71-44FE-9ED4-7DBC8DD8EDAF}` |
+| Graphics Event List | `{4C240B3B-EE78-4603-AD84-8AFDD11ABDD4}` |
+| Graphics Event Call Stack | `{8CAAD384-0D1A-4F26-80B4-94CDAC3E596B}` |
+
+## Other Windows
+
+| Tool Window | GUID |
+|-------------|------|
+| Notifications | `{F4FC5FF1-28EF-4B04-AD02-6B298310CCC7}` |
+| Start Window | `{C93A910A-0FA6-4307-93A4-F2BD61EC7828}` |
+| Resource Explorer | `{E5C86464-96BE-4D7C-9A8B-ABCB3BBF5F92}` |
+| Call Hierarchy | `{3822E751-EB69-4B0E-B301-595A9E4C74D5}` |
+| Code Metrics | `{9A7CEBBB-DC5C-4986-BC49-962DA46AA506}` |
+| IntelliCode | `{B1CE3AEF-C78D-49EE-B72B-EC1FBC908313}` |
+| Containers | `{797F5B3D-853A-4854-A9F2-C488BAC2661B}` |
+| Source Control Explorer | `{53544C4D-5C18-11D3-AB71-0050040AE094}` |
+| Syntax Visualizer | `{DA7E21AA-DA94-452D-8AA1-D1B23F73F576}` |
+| Known Monikers Explorer | `{CFFF3162-9C8D-4244-B0A7-E3B39A968B24}` |
+| F# Interactive | `{DEE22B65-9761-4A26-8FB2-759B971D6DFC}` |
+| C# Interactive | `{CA8CC5C7-0231-406A-95CD-AA5ED6AC0190}` |
+
+## Usage Examples
+
+### Dock with Solution Explorer
+
+```csharp
+[ProvideToolWindow(typeof(MyToolWindow.Pane),
+    Style = VsDockStyle.Tabbed,
+    Window = "3ae79031-e1bc-11d0-8f78-00a0c9110057")] // Solution Explorer
+public sealed class MyPackage : ToolkitPackage { }
+```
+
+### Dock with Error List
+
+```csharp
+[ProvideToolWindow(typeof(MyToolWindow.Pane),
+    Style = VsDockStyle.Tabbed,
+    Window = "d78612c7-9962-4b83-95d9-268046dad23a")] // Error List
+public sealed class MyPackage : ToolkitPackage { }
+```
+
+### Show a Built-in Tool Window
+
+```csharp
+// Using DTE
+var dte = await VS.GetServiceAsync<DTE, DTE2>();
+dte.Windows.Item(EnvDTE.Constants.vsWindowKindSolutionExplorer).Activate();
+
+// Using IVsUIShell
+var uiShell = await VS.Services.GetUIShellAsync();
+var errorListGuid = new Guid("d78612c7-9962-4b83-95d9-268046dad23a");
+uiShell.FindToolWindow((uint)__VSFINDTOOLWIN.FTW_fForceCreate, ref errorListGuid, out var frame);
+frame.Show();
+```
+
+### Find and Activate Any Tool Window
+
+```csharp
+public static async Task ShowToolWindowAsync(Guid toolWindowGuid)
+{
+    await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+    var shell = await VS.Services.GetUIShellAsync();
+    shell.FindToolWindow(
+        (uint)__VSFINDTOOLWIN.FTW_fForceCreate,
+        ref toolWindowGuid,
+        out var frame);
+
+    frame?.Show();
+}
+```
+
+<Callout type="tip">
+Use `EnvDTE.Constants` for common tool windows when available, as they provide compile-time checking and better discoverability.
+</Callout>
+
+## See Also
+
+- [Tool Windows](tool-windows) - Creating custom tool windows
+- [Debug Engine GUIDs](debug-guids) - Debugger-related GUIDs
