@@ -1,0 +1,361 @@
+---
+title: InfoBars and Notifications
+description: Learn how to display non-modal informational messages using InfoBars.
+category: fundamentals
+order: 11
+---
+
+import Callout from '@components/Callout.astro';
+
+InfoBars are non-modal notification banners that appear at the top of documents, tool windows, or the main VS window. They're ideal for suggestions, warnings, or actions that don't require immediate attention.
+
+## Quick Start with Community Toolkit
+
+```csharp
+// Simple InfoBar in a document
+var docView = await VS.Documents.GetActiveDocumentViewAsync();
+var infoBar = await VS.InfoBar.CreateAsync(docView, "NuGet packages need to be restored.");
+await infoBar.TryShowInfoBarUIAsync();
+```
+
+## InfoBar with Actions
+
+```csharp
+var model = new InfoBarModel(
+    new[]
+    {
+        new InfoBarTextSpan("This file has been modified outside the editor. "),
+        new InfoBarHyperlink("Reload", "reload"),
+        new InfoBarTextSpan(" | "),
+        new InfoBarHyperlink("Ignore", "ignore")
+    },
+    KnownMonikers.StatusWarning,
+    isCloseButtonVisible: true);
+
+var infoBar = await VS.InfoBar.CreateAsync(docView, model);
+infoBar.ActionItemClicked += (s, e) =>
+{
+    switch (e.ActionItem.ActionContext)
+    {
+        case "reload":
+            ReloadDocument();
+            break;
+        case "ignore":
+            // Do nothing
+            break;
+    }
+    e.InfoBarUIElement.Close();
+};
+
+await infoBar.TryShowInfoBarUIAsync();
+```
+
+## InfoBarModel
+
+The `InfoBarModel` class defines the content and appearance:
+
+```csharp
+var model = new InfoBarModel(
+    textSpans: new[]
+    {
+        new InfoBarTextSpan("Your message here"),
+        new InfoBarHyperlink("Click Me", "action1")
+    },
+    image: KnownMonikers.StatusInformation,
+    isCloseButtonVisible: true);
+```
+
+### Text Spans
+
+| Type | Description |
+|------|-------------|
+| `InfoBarTextSpan` | Plain text |
+| `InfoBarHyperlink` | Clickable link with action context |
+| `InfoBarButton` | Button-styled action (VS 2019+) |
+
+```csharp
+new InfoBarTextSpan("Regular text. "),
+new InfoBarHyperlink("Link text", actionContext: "myAction"),
+new InfoBarButton("Button", actionContext: "buttonAction")
+```
+
+### Icons
+
+Use `KnownMonikers` for standard icons:
+
+| Icon | Usage |
+|------|-------|
+| `KnownMonikers.StatusInformation` | General information |
+| `KnownMonikers.StatusWarning` | Warnings |
+| `KnownMonikers.StatusError` | Errors |
+| `KnownMonikers.StatusOK` | Success/confirmation |
+| `KnownMonikers.StatusHelp` | Help/tips |
+
+## Showing InfoBars in Different Locations
+
+### In a Document
+
+```csharp
+// Get the active document
+var docView = await VS.Documents.GetActiveDocumentViewAsync();
+var infoBar = await VS.InfoBar.CreateAsync(docView, "Message for this document");
+await infoBar.TryShowInfoBarUIAsync();
+```
+
+### In a Tool Window
+
+```csharp
+// In your tool window class
+var model = new InfoBarModel("Update available for this extension.");
+var infoBar = await VS.InfoBar.CreateAsync(MyToolWindow, model);
+await infoBar.TryShowInfoBarUIAsync();
+```
+
+### In the Main Window (Global)
+
+```csharp
+var model = new InfoBarModel(
+    new[] { new InfoBarTextSpan("A new version of this extension is available.") },
+    KnownMonikers.StatusInformation);
+
+var infoBar = await VS.InfoBar.CreateAsync(model);
+await infoBar.TryShowInfoBarUIAsync();
+```
+
+## Handling Actions
+
+```csharp
+var model = new InfoBarModel(
+    new[]
+    {
+        new InfoBarTextSpan("Configuration file is missing. "),
+        new InfoBarHyperlink("Create", "create"),
+        new InfoBarHyperlink("Learn More", "help")
+    },
+    KnownMonikers.StatusWarning);
+
+var infoBar = await VS.InfoBar.CreateAsync(model);
+
+infoBar.ActionItemClicked += async (sender, args) =>
+{
+    var action = args.ActionItem.ActionContext as string;
+
+    switch (action)
+    {
+        case "create":
+            await CreateConfigFileAsync();
+            args.InfoBarUIElement.Close();
+            break;
+
+        case "help":
+            System.Diagnostics.Process.Start("https://docs.example.com/config");
+            // Don't close - user might want to create after reading
+            break;
+    }
+};
+
+await infoBar.TryShowInfoBarUIAsync();
+```
+
+## Closing an InfoBar
+
+```csharp
+// User clicks close button (automatic)
+// Or programmatically:
+infoBar.ActionItemClicked += (s, e) =>
+{
+    e.InfoBarUIElement.Close();
+};
+
+// Or track the UI element
+IVsInfoBarUIElement _infoBarUI;
+
+var infoBar = await VS.InfoBar.CreateAsync(model);
+infoBar.ActionItemClicked += (s, e) => _infoBarUI = e.InfoBarUIElement;
+await infoBar.TryShowInfoBarUIAsync();
+
+// Later...
+_infoBarUI?.Close();
+```
+
+## Traditional Approach
+
+Using `IVsInfoBarUIFactory` directly:
+
+```csharp
+public class InfoBarService
+{
+    private readonly IServiceProvider _serviceProvider;
+
+    public InfoBarService(IServiceProvider serviceProvider)
+    {
+        _serviceProvider = serviceProvider;
+    }
+
+    public async Task ShowInfoBarAsync(IVsWindowFrame frame, string message)
+    {
+        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+        var factory = (IVsInfoBarUIFactory)_serviceProvider.GetService(typeof(SVsInfoBarUIFactory));
+        var host = frame as IVsInfoBarHost;
+
+        if (factory == null || host == null) return;
+
+        var model = new InfoBarModel(
+            new[] { new InfoBarTextSpan(message) },
+            KnownMonikers.StatusInformation,
+            isCloseButtonVisible: true);
+
+        var uiElement = factory.CreateInfoBar(model);
+        uiElement.Advise(new InfoBarEvents(), out _);
+        host.AddInfoBar(uiElement);
+    }
+}
+
+public class InfoBarEvents : IVsInfoBarUIEvents
+{
+    public void OnClosed(IVsInfoBarUIElement infoBarUIElement)
+    {
+        // InfoBar was closed
+    }
+
+    public void OnActionItemClicked(IVsInfoBarUIElement infoBarUIElement, IVsInfoBarActionItem actionItem)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+
+        var context = actionItem.ActionContext as string;
+        // Handle action...
+    }
+}
+```
+
+## Complete Example
+
+An extension that suggests enabling a feature:
+
+```csharp
+public class FeatureSuggestionService
+{
+    private IVsInfoBarUIElement _currentInfoBar;
+    private const string SettingKey = "FeatureXEnabled";
+
+    public async Task SuggestFeatureAsync()
+    {
+        // Don't show if already enabled or dismissed
+        if (await IsFeatureEnabledAsync() || await WasDismissedAsync())
+            return;
+
+        var model = new InfoBarModel(
+            new IVsInfoBarTextSpan[]
+            {
+                new InfoBarTextSpan("Feature X can improve your productivity. "),
+                new InfoBarHyperlink("Enable", "enable"),
+                new InfoBarTextSpan(" | "),
+                new InfoBarHyperlink("Learn More", "learn"),
+                new InfoBarTextSpan(" | "),
+                new InfoBarHyperlink("Don't show again", "dismiss")
+            },
+            KnownMonikers.StatusInformation,
+            isCloseButtonVisible: true);
+
+        var infoBar = await VS.InfoBar.CreateAsync(model);
+
+        infoBar.ActionItemClicked += async (sender, args) =>
+        {
+            var action = args.ActionItem.ActionContext as string;
+
+            switch (action)
+            {
+                case "enable":
+                    await EnableFeatureAsync();
+                    await VS.StatusBar.ShowMessageAsync("Feature X enabled!");
+                    args.InfoBarUIElement.Close();
+                    break;
+
+                case "learn":
+                    await VS.Commands.ExecuteAsync(
+                        "View.WebBrowser",
+                        "https://example.com/feature-x");
+                    break;
+
+                case "dismiss":
+                    await SaveDismissedAsync();
+                    args.InfoBarUIElement.Close();
+                    break;
+            }
+        };
+
+        if (await infoBar.TryShowInfoBarUIAsync())
+        {
+            // Track so we can close programmatically if needed
+            _currentInfoBar = null; // Get from event if needed
+        }
+    }
+
+    private Task<bool> IsFeatureEnabledAsync() => Task.FromResult(false);
+    private Task<bool> WasDismissedAsync() => Task.FromResult(false);
+    private Task EnableFeatureAsync() => Task.CompletedTask;
+    private Task SaveDismissedAsync() => Task.CompletedTask;
+}
+```
+
+## InfoBar in Solution Explorer
+
+Show an InfoBar for the entire solution:
+
+```csharp
+public async Task ShowSolutionInfoBarAsync(string message)
+{
+    await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+    var shell = (IVsShell)await VS.Services.GetShellAsync();
+    shell.GetProperty((int)__VSSPROPID7.VSSPROPID_MainWindowInfoBarHost, out var hostObj);
+
+    if (hostObj is IVsInfoBarHost host)
+    {
+        var factory = (IVsInfoBarUIFactory)
+            await VS.Services.GetInfoBarUIFactoryAsync();
+
+        var model = new InfoBarModel(message);
+        var uiElement = factory.CreateInfoBar(model);
+
+        host.AddInfoBar(uiElement);
+    }
+}
+```
+
+## Best Practices
+
+1. **Be concise** - InfoBars should be scannable at a glance
+2. **Provide actions** - Don't just inform; help users act
+3. **Allow dismissal** - Always include a close button or "Don't show again"
+4. **Don't spam** - One InfoBar at a time per location
+5. **Use appropriate icons** - Match the severity/type of message
+6. **Remember preferences** - If dismissed, don't show again (persist the choice)
+
+<Callout type="tip">
+InfoBars are perfect for non-urgent suggestions like "Would you like to enable..." or "A newer version is available." For errors requiring action, use the Error List instead.
+</Callout>
+
+<Callout type="warning">
+Don't show InfoBars immediately when VS starts. Wait until the user interacts with relevant features, or delay by several seconds.
+</Callout>
+
+## When to Use InfoBars vs Other UI
+
+| Scenario | Recommended UI |
+|----------|----------------|
+| "Feature X is available" | InfoBar |
+| "File modified externally" | InfoBar with Reload action |
+| "Build failed with errors" | Error List |
+| "Operation in progress" | Progress Indication |
+| "5 files processed" | Status Bar message |
+| "Are you sure you want to delete?" | Modal Dialog |
+| "Extension updated, restart required" | InfoBar |
+
+## See Also
+
+- [Output Window](output-window) - Detailed logging
+- [Error List](error-list) - Errors and warnings
+- [Status Bar](status-bar) - Brief status messages
+- [Progress Indication](progress-indication) - Long-running operations
