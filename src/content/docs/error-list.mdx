@@ -1,0 +1,428 @@
+---
+title: Error List
+description: Learn how to add errors, warnings, and messages to the Visual Studio Error List.
+category: fundamentals
+order: 9
+---
+
+import Callout from '@components/Callout.astro';
+
+The Error List window displays errors, warnings, and messages from builds, analyzers, and extensions. Your extension can add custom entries to help users identify and navigate to problems.
+
+## Quick Start with Community Toolkit
+
+```csharp
+// Add an error
+await VS.MessageBox.ShowErrorAsync("Something went wrong");
+
+// For Error List entries, use TableDataSource (see complete example below)
+```
+
+## Using ErrorListProvider
+
+The `ErrorListProvider` class is the standard way to add items to the Error List:
+
+```csharp
+using Microsoft.VisualStudio.Shell;
+using System;
+
+public class MyErrorListManager : IDisposable
+{
+    private readonly ErrorListProvider _errorListProvider;
+
+    public MyErrorListManager(IServiceProvider serviceProvider)
+    {
+        _errorListProvider = new ErrorListProvider(serviceProvider)
+        {
+            ProviderName = "My Extension",
+            ProviderGuid = new Guid("YOUR-GUID-HERE")
+        };
+    }
+
+    public void AddError(string message, string filePath, int line, int column)
+    {
+        var task = new ErrorTask
+        {
+            Category = TaskCategory.BuildCompile,
+            ErrorCategory = TaskErrorCategory.Error,
+            Text = message,
+            Document = filePath,
+            Line = line - 1,      // Error List uses 0-based line numbers
+            Column = column - 1,  // Error List uses 0-based column numbers
+            CanDelete = true,
+            HierarchyItem = null
+        };
+
+        // Enable navigation to the error location
+        task.Navigate += (s, e) =>
+        {
+            task.Line++; // Navigate uses 1-based
+            _errorListProvider.Navigate(task, Guid.Empty);
+            task.Line--;
+        };
+
+        _errorListProvider.Tasks.Add(task);
+    }
+
+    public void AddWarning(string message, string filePath, int line, int column)
+    {
+        var task = new ErrorTask
+        {
+            Category = TaskCategory.BuildCompile,
+            ErrorCategory = TaskErrorCategory.Warning,
+            Text = message,
+            Document = filePath,
+            Line = line - 1,
+            Column = column - 1
+        };
+
+        task.Navigate += (s, e) => _errorListProvider.Navigate(task, Guid.Empty);
+        _errorListProvider.Tasks.Add(task);
+    }
+
+    public void AddMessage(string message)
+    {
+        var task = new ErrorTask
+        {
+            Category = TaskCategory.BuildCompile,
+            ErrorCategory = TaskErrorCategory.Message,
+            Text = message
+        };
+
+        _errorListProvider.Tasks.Add(task);
+    }
+
+    public void Clear()
+    {
+        _errorListProvider.Tasks.Clear();
+    }
+
+    public void Show()
+    {
+        _errorListProvider.Show();
+        _errorListProvider.BringToFront();
+    }
+
+    public void Dispose()
+    {
+        _errorListProvider?.Dispose();
+    }
+}
+```
+
+## ErrorTask Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `ErrorCategory` | `TaskErrorCategory` | Error, Warning, or Message |
+| `Category` | `TaskCategory` | BuildCompile, CodeSense, Comments, etc. |
+| `Text` | `string` | The message displayed |
+| `Document` | `string` | Full path to the file |
+| `Line` | `int` | 0-based line number |
+| `Column` | `int` | 0-based column number |
+| `HelpKeyword` | `string` | F1 help keyword |
+| `CanDelete` | `bool` | Whether user can delete the entry |
+| `Priority` | `TaskPriority` | High, Normal, or Low |
+| `Subcategory` | `string` | Additional categorization |
+
+## Error Categories
+
+```csharp
+// Errors - Red X icon, blocks build success
+task.ErrorCategory = TaskErrorCategory.Error;
+
+// Warnings - Yellow triangle icon
+task.ErrorCategory = TaskErrorCategory.Warning;
+
+// Messages - Blue info icon
+task.ErrorCategory = TaskErrorCategory.Message;
+```
+
+## Task Categories
+
+The `TaskCategory` determines which filter shows the error:
+
+```csharp
+// Build errors (shown in Build + IntelliSense filter)
+task.Category = TaskCategory.BuildCompile;
+
+// IntelliSense errors (shown in IntelliSense filter only)
+task.Category = TaskCategory.CodeSense;
+
+// Comment tasks like TODO (shown in Tasks view)
+task.Category = TaskCategory.Comments;
+
+// General/other
+task.Category = TaskCategory.Misc;
+```
+
+## Navigation Support
+
+Enable clicking an error to navigate to the source location:
+
+```csharp
+public void AddNavigableError(string message, string filePath, int line, int column)
+{
+    var task = new ErrorTask
+    {
+        ErrorCategory = TaskErrorCategory.Error,
+        Text = message,
+        Document = filePath,
+        Line = line - 1,
+        Column = column - 1
+    };
+
+    // Handle double-click navigation
+    task.Navigate += (sender, e) =>
+    {
+        // Open the document and navigate to line/column
+        VsShellUtilities.OpenDocument(
+            _serviceProvider,
+            filePath,
+            Guid.Empty,
+            out _,
+            out _,
+            out var windowFrame);
+
+        windowFrame?.Show();
+
+        // Move to the specific line
+        var textView = VsShellUtilities.GetTextView(windowFrame);
+        textView?.SetCaretPos(line - 1, column - 1);
+    };
+
+    _errorListProvider.Tasks.Add(task);
+}
+```
+
+### Simplified Navigation
+
+`ErrorListProvider.Navigate` handles most navigation automatically:
+
+```csharp
+task.Navigate += (s, e) =>
+{
+    // Navigate uses 1-based line numbers internally
+    var originalLine = task.Line;
+    task.Line++; // Convert to 1-based
+    _errorListProvider.Navigate(task, VSConstants.LOGVIEWID_Code);
+    task.Line = originalLine; // Restore
+};
+```
+
+## Adding Error Codes
+
+Include an error code for documentation lookup:
+
+```csharp
+var task = new ErrorTask
+{
+    ErrorCategory = TaskErrorCategory.Error,
+    Text = "Null reference detected",
+    Subcategory = "MY001", // Appears in Code column
+    HelpKeyword = "MY001", // F1 help lookup
+    Document = filePath,
+    Line = line - 1
+};
+```
+
+## Project-Specific Errors
+
+Associate errors with a specific project:
+
+```csharp
+public async Task AddProjectErrorAsync(string message, Project project, string filePath, int line)
+{
+    await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+    var hierarchy = await project.ToHierarchyItemAsync();
+
+    var task = new ErrorTask
+    {
+        ErrorCategory = TaskErrorCategory.Error,
+        Text = message,
+        Document = filePath,
+        Line = line - 1,
+        HierarchyItem = hierarchy // Associates with project
+    };
+
+    _errorListProvider.Tasks.Add(task);
+}
+```
+
+## Complete Example
+
+A validation service that reports errors to the Error List:
+
+```csharp
+using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Shell.Interop;
+using System;
+using System.Collections.Generic;
+
+public class ValidationService : IDisposable
+{
+    private readonly ErrorListProvider _errorListProvider;
+    private readonly IServiceProvider _serviceProvider;
+
+    public ValidationService(IServiceProvider serviceProvider)
+    {
+        _serviceProvider = serviceProvider;
+        _errorListProvider = new ErrorListProvider(serviceProvider)
+        {
+            ProviderName = "My Validator",
+            ProviderGuid = new Guid("12345678-1234-1234-1234-123456789012")
+        };
+    }
+
+    public void ValidateDocument(string filePath, string content)
+    {
+        // Clear previous errors for this file
+        ClearErrorsForFile(filePath);
+
+        var errors = PerformValidation(content);
+
+        foreach (var error in errors)
+        {
+            AddError(error, filePath);
+        }
+
+        if (errors.Count > 0)
+        {
+            _errorListProvider.Show();
+        }
+    }
+
+    private void AddError(ValidationError error, string filePath)
+    {
+        var task = new ErrorTask
+        {
+            Category = TaskCategory.CodeSense,
+            ErrorCategory = error.Severity,
+            Text = error.Message,
+            Document = filePath,
+            Line = error.Line - 1,
+            Column = error.Column - 1,
+            Subcategory = error.Code,
+            HelpKeyword = error.Code
+        };
+
+        task.Navigate += (s, e) =>
+        {
+            task.Line++;
+            _errorListProvider.Navigate(task, VSConstants.LOGVIEWID_Code);
+            task.Line--;
+        };
+
+        _errorListProvider.Tasks.Add(task);
+    }
+
+    public void ClearErrorsForFile(string filePath)
+    {
+        for (int i = _errorListProvider.Tasks.Count - 1; i >= 0; i--)
+        {
+            if (_errorListProvider.Tasks[i] is ErrorTask task &&
+                string.Equals(task.Document, filePath, StringComparison.OrdinalIgnoreCase))
+            {
+                _errorListProvider.Tasks.RemoveAt(i);
+            }
+        }
+    }
+
+    public void ClearAll()
+    {
+        _errorListProvider.Tasks.Clear();
+    }
+
+    private List<ValidationError> PerformValidation(string content)
+    {
+        // Your validation logic here
+        return new List<ValidationError>();
+    }
+
+    public void Dispose()
+    {
+        _errorListProvider?.Dispose();
+    }
+}
+
+public class ValidationError
+{
+    public string Code { get; set; }
+    public string Message { get; set; }
+    public int Line { get; set; }
+    public int Column { get; set; }
+    public TaskErrorCategory Severity { get; set; }
+}
+```
+
+## Integration with Package
+
+Register and use the validation service:
+
+```csharp
+[PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
+[Guid(PackageGuids.MyPackageString)]
+public sealed class MyPackage : AsyncPackage
+{
+    private ValidationService _validationService;
+
+    protected override async Task InitializeAsync(
+        CancellationToken cancellationToken,
+        IProgress<ServiceProgressData> progress)
+    {
+        await base.InitializeAsync(cancellationToken, progress);
+        await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+
+        _validationService = new ValidationService(this);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _validationService?.Dispose();
+        }
+        base.Dispose(disposing);
+    }
+}
+```
+
+## Best Practices
+
+1. **Clear old errors** - Remove stale errors when re-validating a file
+2. **Use appropriate categories** - `BuildCompile` for build errors, `CodeSense` for live analysis
+3. **Enable navigation** - Users expect to click errors to go to the source
+4. **Include error codes** - Helps users search for documentation
+5. **Don't flood the list** - Too many errors can be overwhelming
+6. **Dispose properly** - Clean up `ErrorListProvider` when your extension unloads
+
+<Callout type="warning">
+Line and column numbers in `ErrorTask` are 0-based, but most editors display 1-based numbers. Remember to convert when setting values.
+</Callout>
+
+<Callout type="tip">
+For Roslyn-based analyzers, use the `DiagnosticAnalyzer` API instead of `ErrorListProvider`. Roslyn handles Error List integration automatically.
+</Callout>
+
+## IVsErrorList Interface
+
+For advanced scenarios, use the `IVsErrorList` service directly:
+
+```csharp
+var errorList = await VS.Services.GetErrorListAsync();
+// or
+var errorList = (IVsErrorList)GetService(typeof(SVsErrorList));
+
+// Bring Error List to front
+errorList.BringToFront();
+
+// Force refresh
+errorList.ForceShowErrors((uint)(__VSERRORCATEGORY.EC_WARNING | __VSERRORCATEGORY.EC_ERROR), out _);
+```
+
+## See Also
+
+- [Output Window](output-window) - Logging and status messages
+- [Task List](task-list) - TODO comments and user tasks
+- [Roslyn Analyzers](/roslyn-analyzers) - Code analysis with diagnostics
